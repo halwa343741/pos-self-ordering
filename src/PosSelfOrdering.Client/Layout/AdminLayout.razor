@@ -25,7 +25,7 @@
                 <span class="pulse-dot"></span>
                 <span class="status-text">STORE OPEN</span>
             </div>
-            <a href="/admin/orders" class="active-orders-counter">
+            <a href="admin/orders" class="active-orders-counter">
                 <span class="counter-icon">📋</span>
                 <span>Pesanan Aktif: <strong>@AdminState.ActiveOrdersCount</strong></span>
             </a>
@@ -50,7 +50,7 @@
             }
             else
             {
-                <a href="/admin/login" class="login-link">Login PIN</a>
+                <a href="admin/login" class="login-link">Login PIN</a>
             }
         </div>
     </header>
@@ -102,7 +102,7 @@
 
                 <div class="sidebar-divider"></div>
 
-                <a href="/" class="nav-item customer-pos-link" target="_blank">
+                <a href="." class="nav-item customer-pos-link" target="_blank">
                     <span class="nav-icon">📱</span>
                     <span class="nav-label">Buka Tab Pelanggan</span>
                 </a>
@@ -134,7 +134,7 @@
         if (!AdminState.IsAuthenticated)
         {
             var uri = Navigation.Uri.ToLowerInvariant();
-            if (!uri.Contains("/admin/login"))
+            if (!uri.Contains("admin/login"))
             {
                 // Auto login as Manager for easy testing or redirect to login
                 await AdminService.LoginWithPinAsync("8888");
@@ -182,7 +182,7 @@
     private void HandleLogout()
     {
         AdminService.Logout();
-        Navigation.NavigateTo("/admin/login");
+        Navigation.NavigateTo("admin/login");
     }
 
     public void Dispose()

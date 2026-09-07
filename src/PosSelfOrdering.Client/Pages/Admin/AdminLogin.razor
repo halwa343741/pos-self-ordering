@@ -71,7 +71,7 @@
         </button>
 
         <div class="login-footer">
-            <a href="/" class="back-to-kiosk-link">← Kembali ke Self-Ordering Pelanggan</a>
+            <a href="" class="back-to-kiosk-link">← Kembali ke Self-Ordering Pelanggan</a>
         </div>
     </div>
 </div>
@@ -360,7 +360,7 @@
             var success = await AdminService.LoginWithPinAsync(enteredPin);
             if (success)
             {
-                Navigation.NavigateTo("/admin/orders");
+                Navigation.NavigateTo("admin/orders");
             }
             else
             {

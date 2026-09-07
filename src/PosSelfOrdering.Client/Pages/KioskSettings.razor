@@ -70,7 +70,7 @@
         }
     </div>
 
-    <button class="btn btn-ghost btn-block" @onclick='() => Nav.NavigateTo("/menu")'>
+    <button class="btn btn-ghost btn-block" @onclick='() => Nav.NavigateTo("menu")'>
         Kembali ke Menu
     </button>
 </div>
@@ -116,6 +116,6 @@
             DateTime.UtcNow.AddHours(12)
         ));
 
-        Nav.NavigateTo("/menu");
+        Nav.NavigateTo("menu");
     }
 }

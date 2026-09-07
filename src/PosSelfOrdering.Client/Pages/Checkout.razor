@@ -24,7 +24,7 @@
             <EmptyState Title="Keranjang Kosong"
                         Description="Silakan pilih menu terlebih dahulu sebelum melakukan checkout."
                         ActionText="Kembali ke Menu"
-                        OnAction='() => Nav.NavigateTo("/menu")' />
+                        OnAction='() => Nav.NavigateTo("menu")' />
         </div>
     }
     else
@@ -204,7 +204,7 @@
             var response = await OrderService.SubmitOrderAsync(_selectedPayment, _kitchenNotes);
             if (response.Success && response.Data is not null)
             {
-                Nav.NavigateTo($"/order-status/{response.Data.OrderNumber}");
+                Nav.NavigateTo($"order-status/{response.Data.OrderNumber}");
             }
             else
             {
