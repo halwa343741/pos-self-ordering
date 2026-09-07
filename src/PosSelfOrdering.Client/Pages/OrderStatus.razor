@@ -1,0 +1,230 @@
+@page "/order-status/{OrderNumber}"
+@using PosSelfOrdering.Client.Services
+@using PosSelfOrdering.Client.DTOs.Order
+@using PosSelfOrdering.Client.Extensions
+@using PosSelfOrdering.Client.Components.Common
+@using PosSelfOrdering.Client.Components.Checkout
+@inject IOrderService OrderService
+@inject SharedPosDataStore Store
+@inject BroadcastChannelService Broadcast
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@implements IDisposable
+
+<div class="animate-fade-in" style="max-width: 600px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px;">
+    <!-- Order Hero Card -->
+    <div class="glass-panel" style="padding: 24px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 14px;">
+        <div style="width: 56px; height: 56px; border-radius: var(--radius-full); background: @StatusBgColor; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; box-shadow: 0 0 20px @StatusGlowColor;">
+            @StatusIcon
+        </div>
+
+        <div>
+            <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase;">Nomor Pesanan</span>
+            <h3 style="font-size: 1.4rem; color: var(--text-primary); font-weight: 800; letter-spacing: 0.05em;">@OrderNumber</h3>
+        </div>
+
+        @if (_orderStatus != null)
+        {
+            <div style="background: var(--bg-surface-elevated); padding: 8px 20px; border-radius: var(--radius-full); display: inline-flex; align-items: center; gap: 10px;">
+                <span style="font-size: 0.85rem; color: var(--text-secondary);">Nomor Antrean:</span>
+                <strong style="font-size: 1.2rem; color: var(--color-primary);">@_orderStatus.QueueNumber</strong>
+            </div>
+        }
+    </div>
+
+    <!-- Status Progress Steps -->
+    <div class="glass-panel" style="padding: 20px;">
+        <h4 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 16px; text-align: center;">Status Pesanan</h4>
+
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; position: relative;">
+            <!-- Step 1: Menunggu Bayar -->
+            <div style="display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px;">
+                <div style="width: 32px; height: 32px; border-radius: var(--radius-full); background: @(IsStepActive(1) ? "var(--color-primary)" : "var(--bg-surface-elevated)"); color: @(IsStepActive(1) ? "#000" : "var(--text-muted)"); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.85rem;">
+                    1
+                </div>
+                <span style="font-size: 0.72rem; font-weight: 600; color: @(IsStepActive(1) ? "var(--text-primary)" : "var(--text-muted)");">Bayar</span>
+            </div>
+
+            <!-- Step 2: Dimasak -->
+            <div style="display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px;">
+                <div style="width: 32px; height: 32px; border-radius: var(--radius-full); background: @(IsStepActive(2) ? "var(--color-primary)" : "var(--bg-surface-elevated)"); color: @(IsStepActive(2) ? "#000" : "var(--text-muted)"); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.85rem;">
+                    2
+                </div>
+                <span style="font-size: 0.72rem; font-weight: 600; color: @(IsStepActive(2) ? "var(--text-primary)" : "var(--text-muted)");">Disiapkan</span>
+            </div>
+
+            <!-- Step 3: Siap -->
+            <div style="display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px;">
+                <div style="width: 32px; height: 32px; border-radius: var(--radius-full); background: @(IsStepActive(3) ? "var(--color-success)" : "var(--bg-surface-elevated)"); color: @(IsStepActive(3) ? "#fff" : "var(--text-muted)"); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.85rem;">
+                    3
+                </div>
+                <span style="font-size: 0.72rem; font-weight: 600; color: @(IsStepActive(3) ? "var(--color-success)" : "var(--text-muted)");">Siap</span>
+            </div>
+
+            <!-- Step 4: Selesai -->
+            <div style="display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px;">
+                <div style="width: 32px; height: 32px; border-radius: var(--radius-full); background: @(IsStepActive(4) ? "var(--color-info)" : "var(--bg-surface-elevated)"); color: @(IsStepActive(4) ? "#fff" : "var(--text-muted)"); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.85rem;">
+                    4
+                </div>
+                <span style="font-size: 0.72rem; font-weight: 600; color: @(IsStepActive(4) ? "var(--text-primary)" : "var(--text-muted)");">Selesai</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dynamic QRIS payment component if status is PendingPayment -->
+    @if (_currentStatus == "PendingPayment")
+    {
+        <QrisDisplay Amount="@(_orderStatus?.GrandTotal ?? 66700)" />
+    }
+    else if (_currentStatus == "Cooking")
+    {
+        <div class="glass-panel" style="padding: 24px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px;">
+            <div style="font-size: 2.2rem; animation: pulseGlow 2s infinite;">🍳</div>
+            <h3 style="color: var(--color-warning);">Pesanan Sedang Disiapkan</h3>
+            <p style="font-size: 0.9rem; max-width: 340px; margin: 0;">Barista dan chef kami sedang meracik pesanan spesial Anda dengan cermat.</p>
+            <span style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 6px;">
+                Estimasi waktu: <strong>@(_orderStatus?.EstimatedMinutesRemaining ?? 8) Menit</strong>
+            </span>
+        </div>
+    }
+    else if (_currentStatus == "Ready")
+    {
+        <div class="glass-panel" style="padding: 24px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; border-color: rgba(16, 185, 129, 0.4);">
+            <div style="font-size: 2.5rem;">🔔</div>
+            <h3 style="color: var(--color-success);">Pesanan Siap Diambil!</h3>
+            <p style="font-size: 0.9rem; max-width: 340px; margin: 0;">Silakan ambil pesanan Anda di meja pick-up counter dengan menunjukkan nomor antrean <strong>@_orderStatus?.QueueNumber</strong>.</p>
+        </div>
+    }
+
+    <!-- Action Buttons -->
+    <div style="display: flex; gap: 12px; margin-top: 10px;">
+        <button class="btn btn-secondary" style="flex: 1;" @onclick='() => Nav.NavigateTo($"/receipt/{OrderNumber}")'>
+            🧾 Lihat Struk Digital
+        </button>
+        <button class="btn btn-primary" style="flex: 1;" @onclick='() => Nav.NavigateTo("/menu")'>
+            + Pesan Lagi
+        </button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string OrderNumber { get; set; } = string.Empty;
+
+    private OrderStatusDto? _orderStatus;
+    private string _currentStatus = "PendingPayment";
+    private PeriodicTimer? _pollTimer;
+    private bool _hasPlayedChime = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Store.OnOrderStatusUpdated += OnStoreStatusChanged;
+        Broadcast.OnOrderStatusUpdated += OnBroadcastStatusChanged;
+
+        await FetchStatusAsync();
+        _pollTimer = new PeriodicTimer(TimeSpan.FromSeconds(3));
+        _ = StartPollingAsync();
+    }
+
+    private void OnStoreStatusChanged(string orderNum, string status)
+    {
+        if (orderNum.Equals(OrderNumber, StringComparison.OrdinalIgnoreCase))
+        {
+            InvokeAsync(async () =>
+            {
+                await FetchStatusAsync();
+                StateHasChanged();
+            });
+        }
+    }
+
+    private void OnBroadcastStatusChanged(string orderNum, string status)
+    {
+        if (orderNum.Equals(OrderNumber, StringComparison.OrdinalIgnoreCase))
+        {
+            InvokeAsync(async () =>
+            {
+                await FetchStatusAsync();
+                StateHasChanged();
+            });
+        }
+    }
+
+    private async Task FetchStatusAsync()
+    {
+        var response = await OrderService.GetOrderStatusAsync(OrderNumber);
+        if (response.Success && response.Data is not null)
+        {
+            _orderStatus = response.Data;
+            _currentStatus = response.Data.Status;
+
+            if (_currentStatus == "Ready" && !_hasPlayedChime)
+            {
+                _hasPlayedChime = true;
+                try
+                {
+                    await JS.InvokeVoidAsync("audioHelper.playOrderChime");
+                }
+                catch
+                {
+                    // Ignore audio playback error if interaction required
+                }
+            }
+        }
+    }
+
+    private async Task StartPollingAsync()
+    {
+        if (_pollTimer is null) return;
+
+        while (await _pollTimer.WaitForNextTickAsync())
+        {
+            await FetchStatusAsync();
+            await InvokeAsync(StateHasChanged);
+
+            if (_currentStatus == "Completed")
+            {
+                break;
+            }
+        }
+    }
+
+    private bool IsStepActive(int step) => step switch
+    {
+        1 => true,
+        2 => _currentStatus is "Cooking" or "Ready" or "Completed",
+        3 => _currentStatus is "Ready" or "Completed",
+        4 => _currentStatus is "Completed",
+        _ => false
+    };
+
+    private string StatusIcon => _currentStatus switch
+    {
+        "PendingPayment" => "💳",
+        "Cooking" => "⏳",
+        "Ready" => "🎉",
+        "Completed" => "✅",
+        _ => "📦"
+    };
+
+    private string StatusBgColor => _currentStatus switch
+    {
+        "Ready" => "var(--color-success-bg)",
+        "Cooking" => "var(--color-warning-bg)",
+        "Completed" => "var(--color-info-bg)",
+        _ => "var(--color-primary-light)"
+    };
+
+    private string StatusGlowColor => _currentStatus switch
+    {
+        "Ready" => "rgba(16, 185, 129, 0.4)",
+        "Cooking" => "rgba(245, 158, 11, 0.4)",
+        _ => "var(--color-primary-glow)"
+    };
+
+    public void Dispose()
+    {
+        Store.OnOrderStatusUpdated -= OnStoreStatusChanged;
+        Broadcast.OnOrderStatusUpdated -= OnBroadcastStatusChanged;
+        _pollTimer?.Dispose();
+    }
+}

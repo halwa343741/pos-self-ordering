@@ -1,0 +1,56 @@
+@using PosSelfOrdering.Client.Models
+@using PosSelfOrdering.Client.Extensions
+@using PosSelfOrdering.Client.Components.Common
+
+<div class="glass-panel" style="padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+    <div style="display: flex; gap: 12px; align-items: flex-start;">
+        <img src="@Item.MenuItem.ImageUrl" alt="@Item.MenuItem.Name" style="width: 56px; height: 56px; border-radius: var(--radius-sm); object-fit: cover; background: var(--bg-surface-elevated);" />
+
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 2px;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <h4 style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary);">@Item.MenuItem.Name</h4>
+                <button class="btn btn-ghost btn-icon" style="width: 28px; height: 28px; color: var(--color-danger);" @onclick="() => OnRemove.InvokeAsync(Item.CartItemId)" title="Hapus item">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"/>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                    </svg>
+                </button>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(Item.ModifiersSummary))
+            {
+                <span style="font-size: 0.8rem; color: var(--text-secondary);">@Item.ModifiersSummary</span>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(Item.Notes))
+            {
+                <span style="font-size: 0.75rem; color: var(--color-primary); font-style: italic;">Catatan: "@Item.Notes"</span>
+            }
+        </div>
+    </div>
+
+    <div style="display: flex; align-items: center; justify-content: space-between; padding-top: 6px; border-top: 1px solid var(--border-subtle);">
+        <QuantityPicker Value="@Item.Quantity"
+                        ValueChanged="HandleQuantityChanged"
+                        MinValue="1"
+                        MaxValue="99" />
+
+        <span style="font-size: 1.05rem; font-weight: 800; color: var(--color-primary);">
+            @Item.TotalPrice.ToIdr()
+        </span>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public CartItem Item { get; set; } = default!;
+    [Parameter] public EventCallback<int> OnQuantityChanged { get; set; }
+    [Parameter] public EventCallback<string> OnRemove { get; set; }
+
+    private async Task HandleQuantityChanged(int newQty)
+    {
+        if (OnQuantityChanged.HasDelegate)
+        {
+            await OnQuantityChanged.InvokeAsync(newQty);
+        }
+    }
+}

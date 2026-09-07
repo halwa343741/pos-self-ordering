@@ -1,0 +1,203 @@
+@using PosSelfOrdering.Client.DTOs.Admin
+
+@if (IsOpen && Order != null)
+{
+    <div class="modal-backdrop" @onclick="Close">
+        <div class="void-modal-container glass-panel" @onclick:stopPropagation>
+            <div class="modal-header">
+                <div class="header-left">
+                    <span class="header-icon">⚠️</span>
+                    <h3>Batalkan / Void Pesanan</h3>
+                </div>
+                <button type="button" class="close-btn" @onclick="Close">✕</button>
+            </div>
+
+            <div class="modal-body">
+                <div class="order-summary-box">
+                    <div class="summary-line">
+                        <span class="label">Nomor Pesanan:</span>
+                        <strong class="val">@Order.OrderNumber</strong>
+                    </div>
+                    <div class="summary-line">
+                        <span class="label">Meja:</span>
+                        <strong class="val">@(string.IsNullOrWhiteSpace(Order.TableNumber) ? "Takeaway" : Order.TableNumber)</strong>
+                    </div>
+                    <div class="summary-line">
+                        <span class="label">Total Nilai:</span>
+                        <strong class="val val-highlight">@Order.GrandTotal.ToString("C0", new System.Globalization.CultureInfo("id-ID"))</strong>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Pilih / Masukkan Alasan Pembatalan:</label>
+                    <div class="reason-chips">
+                        @foreach (var reason in predefinedReasons)
+                        {
+                            <button type="button" class="reason-chip @(selectedReason == reason ? "active" : "")" @onclick="@(() => SelectReason(reason))">
+                                @reason
+                            </button>
+                        }
+                    </div>
+                    <textarea class="form-textarea" rows="3" placeholder="Atau tuliskan alasan khusus di sini..." @bind="customReason"></textarea>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn-cancel" @onclick="Close">Kembali</button>
+                <button type="button" class="btn-confirm-void" @onclick="ConfirmVoid" disabled="@(string.IsNullOrWhiteSpace(FinalReason))">
+                    <span>Konfirmasi Batalkan</span>
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+.void-modal-container {
+    background: #1e293b;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 20px;
+    max-width: 460px;
+    width: 100%;
+    overflow: hidden;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
+}
+
+.order-summary-box {
+    background: rgba(15, 23, 42, 0.6);
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.summary-line {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+}
+
+.label {
+    color: #94a3b8;
+}
+
+.val {
+    color: #f1f5f9;
+}
+
+.val-highlight {
+    color: #fbbf24;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.form-label {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #cbd5e1;
+}
+
+.reason-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.reason-chip {
+    padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    color: #cbd5e1;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.reason-chip:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.reason-chip.active {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: #ef4444;
+    color: #fca5a5;
+    font-weight: 700;
+}
+
+.form-textarea {
+    width: 100%;
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 10px;
+    padding: 10px;
+    color: #fff;
+    font-size: 0.85rem;
+    resize: none;
+}
+
+.btn-confirm-void {
+    flex: 2;
+    padding: 10px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #ef4444, #b91c1c);
+    border: none;
+    color: #fff;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(239, 68, 68, 0.35);
+}
+
+.btn-confirm-void:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+</style>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public AdminOrderDto? Order { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<string> OnConfirm { get; set; }
+
+    private string selectedReason = "";
+    private string customReason = "";
+
+    private readonly string[] predefinedReasons = new[]
+    {
+        "Pelanggan Batal",
+        "Bahan Baku Habis",
+        "Salah Input Menu",
+        "Pembayaran Gagal/Kedaluwarsa"
+    };
+
+    private string FinalReason => !string.IsNullOrWhiteSpace(customReason) ? customReason : selectedReason;
+
+    private void SelectReason(string reason)
+    {
+        selectedReason = reason;
+    }
+
+    private async Task Close()
+    {
+        selectedReason = "";
+        customReason = "";
+        await OnClose.InvokeAsync();
+    }
+
+    private async Task ConfirmVoid()
+    {
+        if (!string.IsNullOrWhiteSpace(FinalReason))
+        {
+            await OnConfirm.InvokeAsync(FinalReason);
+            await Close();
+        }
+    }
+}

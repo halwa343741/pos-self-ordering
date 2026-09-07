@@ -1,0 +1,896 @@
+@page "/admin/menu"
+@layout AdminLayout
+@inject IAdminService AdminService
+@inject SharedPosDataStore Store
+@inject BroadcastChannelService Broadcast
+@implements IDisposable
+
+<div class="menu-mgmt-container">
+    <!-- HEADER -->
+    <div class="mgmt-header">
+        <div class="header-titles">
+            <h1 class="page-title">Kelola Menu & Voucher</h1>
+            <p class="page-subtitle">Kontrol harga, status ketersediaan stok seketika, dan diskon promo</p>
+        </div>
+
+        <div class="header-tabs">
+            <button type="button" class="tab-btn @(activeTab == "menu" ? "active" : "")" @onclick="@(() => activeTab = "menu")">
+                <span>🍔 Katalog Menu (@menuItems.Count)</span>
+            </button>
+            <button type="button" class="tab-btn @(activeTab == "voucher" ? "active" : "")" @onclick="@(() => activeTab = "voucher")">
+                <span>🏷️ Promo Voucher (@vouchers.Count)</span>
+            </button>
+        </div>
+    </div>
+
+    @if (activeTab == "menu")
+    {
+        <!-- MENU TAB -->
+        <div class="menu-tab-content">
+            <!-- CONTROLS & STATS BAR -->
+            <div class="controls-bar">
+                <div class="filter-group">
+                    <div class="search-input-box">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" class="search-field" placeholder="Cari nama menu..."
+                               value="@searchQuery"
+                               @oninput="@(e => searchQuery = e.Value?.ToString() ?? "")" />
+                    </div>
+
+                    <select class="category-select" @bind="selectedCategory">
+                        <option value="">Semua Kategori</option>
+                        @foreach (var cat in categories)
+                        {
+                            <option value="@cat.Id">@cat.Name</option>
+                        }
+                    </select>
+
+                    <select class="status-select" @bind="selectedAvailabilityFilter">
+                        <option value="all">Semua Status</option>
+                        <option value="available">🟢 Tersedia Saja</option>
+                        <option value="soldout">🔴 Habis Saja</option>
+                    </select>
+                </div>
+
+                <div class="actions-group">
+                    <div class="stock-stats">
+                        <span class="stat-tag ready">Ready: <strong>@menuItems.Count(m => m.IsAvailable)</strong></span>
+                        <span class="stat-tag soldout">Habis: <strong>@menuItems.Count(m => !m.IsAvailable)</strong></span>
+                    </div>
+
+                    <button type="button" class="btn-add-primary" @onclick="OpenAddMenuModal">
+                        <span>➕ Tambah Menu</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- MENU GRID / TABLE -->
+            <div class="menu-items-grid">
+                @if (!filteredMenuItems.Any())
+                {
+                    <div class="empty-results-box">
+                        <span class="empty-icon">🍽️</span>
+                        <p>Tidak ada hidangan yang sesuai dengan filter pencarian.</p>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var item in filteredMenuItems)
+                    {
+                        <div class="admin-menu-card @(!item.IsAvailable ? "item-soldout" : "")">
+                            <div class="item-img-container">
+                                <img src="@item.ImageUrl" alt="@item.Name" class="item-img" loading="lazy" />
+                                @if (!item.IsAvailable)
+                                {
+                                    <div class="soldout-overlay">
+                                        <span>HABIS</span>
+                                    </div>
+                                }
+                                <div class="item-badges-overlay">
+                                    @if (item.IsBestSeller)
+                                    {
+                                        <span class="badge-star">⭐ Best Seller</span>
+                                    }
+                                    @if (item.IsSpicy)
+                                    {
+                                        <span class="badge-spicy">🌶️ Pedas</span>
+                                    }
+                                </div>
+                            </div>
+
+                            <div class="item-content-body">
+                                <div class="item-category-tag">@GetCategoryName(item.CategoryId)</div>
+                                <h3 class="item-name">@item.Name</h3>
+                                <p class="item-desc">@item.Description</p>
+                                <div class="item-price">@item.BasePrice.ToIdr()</div>
+
+                                @if (item.ModifierGroups != null && item.ModifierGroups.Any())
+                                {
+                                    <div class="item-mods-summary">
+                                        <span class="mods-icon">⚙️</span>
+                                        <span>@item.ModifierGroups.Count grup modifier</span>
+                                    </div>
+                                }
+                            </div>
+
+                            <!-- 1-CLICK INSTANT SOLD-OUT SWITCH & ACTIONS -->
+                            <div class="item-actions-footer">
+                                <div class="switch-container">
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" checked="@item.IsAvailable"
+                                               @onchange="@(() => HandleToggleStock(item.Id))" />
+                                        <span class="slider round"></span>
+                                    </label>
+                                    <span class="switch-label @(item.IsAvailable ? "lbl-ready" : "lbl-soldout")">
+                                        @(item.IsAvailable ? "Tersedia" : "Habis")
+                                    </span>
+                                </div>
+
+                                <div class="card-btn-group">
+                                    <button type="button" class="btn-icon edit" @onclick="@(() => OpenEditMenuModal(item))" title="Edit Menu">
+                                        ✏️
+                                    </button>
+                                    <button type="button" class="btn-icon delete" @onclick="@(() => OpenDeleteMenuModal(item))" title="Hapus Menu">
+                                        🗑️
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        <!-- VOUCHER TAB -->
+        <div class="voucher-tab-content">
+            <div class="controls-bar">
+                <div class="filter-group">
+                    <p class="voucher-hint">Kelola kode promo yang dapat digunakan pelanggan pada saat checkout.</p>
+                </div>
+                <button type="button" class="btn-add-primary" @onclick="OpenAddVoucherModal">
+                    <span>➕ Tambah Voucher Promo</span>
+                </button>
+            </div>
+
+            <div class="vouchers-grid">
+                @if (!vouchers.Any())
+                {
+                    <div class="empty-results-box">
+                        <span class="empty-icon">🏷️</span>
+                        <p>Belum ada promo voucher aktif.</p>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var v in vouchers)
+                    {
+                        <div class="voucher-card @(!v.IsActive ? "voucher-inactive" : "")">
+                            <div class="voucher-header">
+                                <div class="voucher-code-badge">
+                                    <span class="code-text">@v.Code</span>
+                                </div>
+                                <span class="voucher-status-pill @(v.IsActive ? "active" : "inactive")">
+                                    @(v.IsActive ? "🟢 Aktif" : "🔴 Nonaktif")
+                                </span>
+                            </div>
+
+                            <div class="voucher-details">
+                                <p class="voucher-desc">@v.Description</p>
+                                <div class="voucher-calc-row">
+                                    <span class="discount-val">
+                                        @(v.IsPercentage ? $"Diskon {v.DiscountAmount}%" : $"Potongan {v.DiscountAmount.ToIdr()}")
+                                    </span>
+                                    <span class="min-order">Min: @v.MinOrderAmount.ToIdr()</span>
+                                </div>
+                            </div>
+
+                            <div class="voucher-footer">
+                                <button type="button" class="btn-action-sm toggle" @onclick="@(() => HandleToggleVoucher(v))">
+                                    @(v.IsActive ? "Nonaktifkan" : "Aktifkan")
+                                </button>
+                                <button type="button" class="btn-action-sm edit" @onclick="@(() => OpenEditVoucherModal(v))">
+                                    Edit
+                                </button>
+                                <button type="button" class="btn-action-sm delete" @onclick="@(() => OpenDeleteVoucherModal(v))">
+                                    Hapus
+                                </button>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    }
+</div>
+
+<!-- MODALS -->
+<MenuEditorModal IsOpen="isMenuModalOpen"
+                 ExistingItem="selectedItemForEdit"
+                 Categories="categories"
+                 OnClose="@(() => isMenuModalOpen = false)"
+                 OnSave="HandleSaveMenu" />
+
+<VoucherEditorModal IsOpen="isVoucherModalOpen"
+                    ExistingVoucher="selectedVoucherForEdit"
+                    OnClose="@(() => isVoucherModalOpen = false)"
+                    OnSave="HandleSaveVoucher" />
+
+<DeleteConfirmModal IsOpen="isDeleteModalOpen"
+                    Title="Konfirmasi Hapus"
+                    Message="@deleteMessage"
+                    ItemName="@deleteItemName"
+                    OnClose="@(() => isDeleteModalOpen = false)"
+                    OnConfirm="HandleConfirmDelete" />
+
+<style>
+.menu-mgmt-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.mgmt-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.page-title {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: #f9fafb;
+    margin: 0;
+}
+
+.page-subtitle {
+    font-size: 0.82rem;
+    color: #9ca3af;
+    margin: 2px 0 0 0;
+}
+
+.header-tabs {
+    display: flex;
+    background: rgba(17, 24, 39, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 4px;
+    gap: 4px;
+}
+
+.tab-btn {
+    background: transparent;
+    border: none;
+    color: #9ca3af;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.tab-btn.active {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(245, 158, 11, 0.1));
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.controls-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    background: rgba(17, 24, 39, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    padding: 12px 16px;
+}
+
+.filter-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    flex: 1;
+}
+
+.search-input-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    padding: 6px 12px;
+    min-width: 220px;
+}
+
+.search-field {
+    background: transparent;
+    border: none;
+    color: #fff;
+    font-size: 0.85rem;
+    outline: none;
+    width: 100%;
+}
+
+.category-select, .status-select {
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    padding: 7px 12px;
+    color: #fff;
+    font-size: 0.82rem;
+    outline: none;
+}
+
+.actions-group {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.stock-stats {
+    display: flex;
+    gap: 8px;
+}
+
+.stat-tag {
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 4px 8px;
+    border-radius: 6px;
+}
+
+.stat-tag.ready {
+    background: rgba(16, 185, 129, 0.12);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.stat-tag.soldout {
+    background: rgba(239, 68, 68, 0.12);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.btn-add-primary {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: #000;
+    font-weight: 800;
+    font-size: 0.85rem;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(245, 158, 11, 0.3);
+    transition: transform 0.15s;
+}
+
+.btn-add-primary:hover {
+    transform: translateY(-1px);
+}
+
+/* MENU GRID */
+.menu-items-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+}
+
+.admin-menu-card {
+    background: rgba(26, 34, 52, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: all 0.2s ease;
+}
+
+.admin-menu-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.35);
+}
+
+.admin-menu-card.item-soldout {
+    opacity: 0.75;
+    border-color: rgba(239, 68, 68, 0.3);
+}
+
+.item-img-container {
+    height: 140px;
+    position: relative;
+    overflow: hidden;
+}
+
+.item-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.soldout-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(239, 68, 68, 0.65);
+    backdrop-filter: blur(2px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-weight: 900;
+    letter-spacing: 2px;
+    font-size: 1.1rem;
+}
+
+.item-badges-overlay {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    display: flex;
+    gap: 4px;
+}
+
+.badge-star, .badge-spicy {
+    font-size: 0.68rem;
+    font-weight: 800;
+    padding: 3px 6px;
+    border-radius: 6px;
+}
+
+.badge-star {
+    background: rgba(245, 158, 11, 0.9);
+    color: #000;
+}
+
+.badge-spicy {
+    background: rgba(239, 68, 68, 0.9);
+    color: #fff;
+}
+
+.item-content-body {
+    padding: 14px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.item-category-tag {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #fbbf24;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+
+.item-name {
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: #f8fafc;
+    margin: 0 0 6px 0;
+}
+
+.item-desc {
+    font-size: 0.76rem;
+    color: #94a3b8;
+    line-height: 1.3;
+    margin: 0 0 8px 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.item-price {
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: #38bdf8;
+    margin-top: auto;
+}
+
+.item-mods-summary {
+    font-size: 0.72rem;
+    color: #94a3b8;
+    margin-top: 6px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.item-actions-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(15, 23, 42, 0.4);
+}
+
+.switch-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* TOGGLE SWITCH */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 22px;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    background-color: #4b5563;
+    transition: 0.3s;
+}
+
+.slider.round {
+    border-radius: 24px;
+}
+
+.slider.round:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: 0.3s;
+    border-radius: 50%;
+}
+
+input:checked + .slider {
+    background-color: #10b981;
+}
+
+input:checked + .slider:before {
+    transform: translateX(18px);
+}
+
+.switch-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.switch-label.lbl-ready { color: #34d399; }
+.switch-label.lbl-soldout { color: #f87171; }
+
+.card-btn-group {
+    display: flex;
+    gap: 6px;
+}
+
+.btn-icon {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    padding: 5px 8px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.btn-icon:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.empty-results-box {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    color: #64748b;
+}
+
+.empty-results-box .empty-icon {
+    font-size: 2.5rem;
+    margin-bottom: 8px;
+}
+
+/* VOUCHERS GRID */
+.vouchers-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+.voucher-card {
+    background: rgba(26, 34, 52, 0.8);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    border-radius: 16px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.voucher-card.voucher-inactive {
+    opacity: 0.6;
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.voucher-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.voucher-code-badge {
+    background: rgba(245, 158, 11, 0.15);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    padding: 4px 10px;
+    border-radius: 8px;
+}
+
+.code-text {
+    font-weight: 800;
+    font-size: 0.95rem;
+    letter-spacing: 1px;
+    color: #fbbf24;
+}
+
+.voucher-status-pill {
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 12px;
+}
+
+.voucher-status-pill.active {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+}
+
+.voucher-status-pill.inactive {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+}
+
+.voucher-desc {
+    font-size: 0.82rem;
+    color: #cbd5e1;
+    margin: 0;
+}
+
+.voucher-calc-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 8px;
+}
+
+.discount-val {
+    font-size: 0.9rem;
+    font-weight: 800;
+    color: #34d399;
+}
+
+.min-order {
+    font-size: 0.72rem;
+    color: #94a3b8;
+}
+
+.voucher-footer {
+    display: flex;
+    gap: 8px;
+    margin-top: auto;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding-top: 12px;
+}
+
+.btn-action-sm {
+    flex: 1;
+    padding: 6px;
+    border-radius: 8px;
+    font-size: 0.76rem;
+    font-weight: 700;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #cbd5e1;
+}
+
+.btn-action-sm.delete {
+    color: #f87171;
+}
+</style>
+
+@code {
+    private string activeTab = "menu";
+    private List<MenuItemDto> menuItems = new();
+    private List<CategoryDto> categories = new();
+    private List<VoucherDto> vouchers = new();
+
+    private string searchQuery = "";
+    private string selectedCategory = "";
+    private string selectedAvailabilityFilter = "all";
+
+    // Modals
+    private bool isMenuModalOpen = false;
+    private MenuItemDto? selectedItemForEdit;
+
+    private bool isVoucherModalOpen = false;
+    private VoucherDto? selectedVoucherForEdit;
+
+    private bool isDeleteModalOpen = false;
+    private string deleteMessage = "";
+    private string? deleteItemName;
+    private Func<Task>? confirmDeleteAction;
+
+    private IEnumerable<MenuItemDto> filteredMenuItems
+    {
+        get
+        {
+            var query = menuItems.AsEnumerable();
+
+            if (!string.IsNullOrWhiteSpace(selectedCategory))
+            {
+                query = query.Where(m => m.CategoryId.Equals(selectedCategory, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (selectedAvailabilityFilter == "available")
+            {
+                query = query.Where(m => m.IsAvailable);
+            }
+            else if (selectedAvailabilityFilter == "soldout")
+            {
+                query = query.Where(m => !m.IsAvailable);
+            }
+
+            if (!string.IsNullOrWhiteSpace(searchQuery))
+            {
+                query = query.Where(m =>
+                    m.Name.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) ||
+                    m.Description.Contains(searchQuery, StringComparison.OrdinalIgnoreCase));
+            }
+
+            return query;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Store.OnMenuCatalogUpdated += OnCatalogUpdated;
+        Store.OnVouchersUpdated += OnVouchersUpdated;
+        Broadcast.OnMenuUpdated += OnCatalogUpdated;
+
+        await ReloadData();
+    }
+
+    private async Task ReloadData()
+    {
+        categories = Store.Categories.Values.OrderBy(c => c.DisplayOrder).ToList();
+        menuItems = Store.MenuItems.Values.ToList();
+        vouchers = (await AdminService.GetVouchersAsync()).ToList();
+        StateHasChanged();
+    }
+
+    private void OnCatalogUpdated()
+    {
+        InvokeAsync(async () =>
+        {
+            await ReloadData();
+        });
+    }
+
+    private void OnVouchersUpdated()
+    {
+        InvokeAsync(async () =>
+        {
+            await ReloadData();
+        });
+    }
+
+    private string GetCategoryName(string catId)
+    {
+        return categories.FirstOrDefault(c => c.Id == catId)?.Name ?? catId;
+    }
+
+    private async Task HandleToggleStock(string itemId)
+    {
+        await AdminService.ToggleItemStockAsync(itemId);
+        await ReloadData();
+    }
+
+    private void OpenAddMenuModal()
+    {
+        selectedItemForEdit = null;
+        isMenuModalOpen = true;
+    }
+
+    private void OpenEditMenuModal(MenuItemDto item)
+    {
+        selectedItemForEdit = item;
+        isMenuModalOpen = true;
+    }
+
+    private async Task HandleSaveMenu(UpsertMenuItemRequest request)
+    {
+        await AdminService.SaveMenuItemAsync(request);
+        await ReloadData();
+    }
+
+    private void OpenDeleteMenuModal(MenuItemDto item)
+    {
+        deleteItemName = item.Name;
+        deleteMessage = $"Menu '{item.Name}' akan dihapus dari katalog.";
+        confirmDeleteAction = async () =>
+        {
+            await AdminService.DeleteMenuItemAsync(item.Id);
+            await ReloadData();
+        };
+        isDeleteModalOpen = true;
+    }
+
+    private void OpenAddVoucherModal()
+    {
+        selectedVoucherForEdit = null;
+        isVoucherModalOpen = true;
+    }
+
+    private void OpenEditVoucherModal(VoucherDto voucher)
+    {
+        selectedVoucherForEdit = voucher;
+        isVoucherModalOpen = true;
+    }
+
+    private async Task HandleSaveVoucher(VoucherDto voucher)
+    {
+        await AdminService.SaveVoucherAsync(voucher);
+        await ReloadData();
+    }
+
+    private async Task HandleToggleVoucher(VoucherDto voucher)
+    {
+        var updated = voucher with { IsActive = !voucher.IsActive };
+        await AdminService.SaveVoucherAsync(updated);
+        await ReloadData();
+    }
+
+    private void OpenDeleteVoucherModal(VoucherDto voucher)
+    {
+        deleteItemName = voucher.Code;
+        deleteMessage = $"Voucher '{voucher.Code}' akan dihapus permanen.";
+        confirmDeleteAction = async () =>
+        {
+            await AdminService.DeleteVoucherAsync(voucher.Code);
+            await ReloadData();
+        };
+        isDeleteModalOpen = true;
+    }
+
+    private async Task HandleConfirmDelete()
+    {
+        if (confirmDeleteAction != null)
+        {
+            await confirmDeleteAction();
+        }
+    }
+
+    public void Dispose()
+    {
+        Store.OnMenuCatalogUpdated -= OnCatalogUpdated;
+        Store.OnVouchersUpdated -= OnVouchersUpdated;
+        Broadcast.OnMenuUpdated -= OnCatalogUpdated;
+    }
+}

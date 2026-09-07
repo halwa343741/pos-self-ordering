@@ -1,0 +1,302 @@
+@page "/admin/settings"
+@layout AdminLayout
+@inject IAdminService AdminService
+@inject SharedPosDataStore Store
+
+<div class="settings-page-container">
+    <!-- HEADER -->
+    <div class="settings-header">
+        <div class="header-titles">
+            <h1 class="page-title">Pengaturan Kedai & Printer</h1>
+            <p class="page-subtitle">Kelola profil usaha, persentase pajak PB1, service charge, dan printer thermal kasir</p>
+        </div>
+    </div>
+
+    @if (savedNotification)
+    {
+        <div class="save-success-alert animate-fade">
+            <span>✅ Pengaturan toko berhasil disimpan ke in-memory store!</span>
+        </div>
+    }
+
+    <div class="settings-grid">
+        <!-- STORE PROFILE -->
+        <div class="settings-card glass-panel">
+            <div class="card-header">
+                <span class="card-icon">☕</span>
+                <h3 class="card-title">Profil Kedai / Restoran</h3>
+            </div>
+
+            <div class="form-grid">
+                <div class="form-group full-width">
+                    <label class="field-label">Nama Kedai / Toko</label>
+                    <input type="text" class="form-input" @bind="storeName" />
+                </div>
+
+                <div class="form-group full-width">
+                    <label class="field-label">Alamat Lengkap (Ditampilkan pada Struk)</label>
+                    <textarea class="form-textarea" rows="2" @bind="address"></textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAX & SERVICE CHARGE -->
+        <div class="settings-card glass-panel">
+            <div class="card-header">
+                <span class="card-icon">🧾</span>
+                <h3 class="card-title">Pajak PB1 & Biaya Layanan</h3>
+            </div>
+
+            <div class="form-grid">
+                <div class="form-group">
+                    <label class="field-label">Tarif PB1 Restoran (%)</label>
+                    <div class="input-with-suffix">
+                        <input type="number" class="form-input" @bind="taxRatePercent" />
+                        <span class="suffix">%</span>
+                    </div>
+                    <span class="field-hint">Standar PB1 Restoran: 10%</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="field-label">Service Charge (%)</label>
+                    <div class="input-with-suffix">
+                        <input type="number" class="form-input" @bind="serviceChargePercent" />
+                        <span class="suffix">%</span>
+                    </div>
+                    <span class="field-hint">Biaya layanan Dine-In: 5%</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- THERMAL PRINTER SETTINGS -->
+        <div class="settings-card glass-panel">
+            <div class="card-header">
+                <span class="card-icon">🖨️</span>
+                <h3 class="card-title">Pengaturan Printer Kasir Thermal</h3>
+            </div>
+
+            <div class="form-grid">
+                <div class="form-group">
+                    <label class="field-label">Lebar Kertas Struk</label>
+                    <select class="form-select" @bind="thermalPaperWidthMm">
+                        <option value="58">58 mm (Printer Portabel Bluetooth)</option>
+                        <option value="80">80 mm (Printer Desktop POS Standar)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="field-label">Auto-Print Saat Pesanan Lunas</label>
+                    <label class="checkbox-label" style="margin-top: 10px;">
+                        <input type="checkbox" @bind="autoPrintReceipt" />
+                        <span>Otomatis buka dialog cetak saat kasir konfirmasi lunas</span>
+                    </label>
+                </div>
+
+                <div class="form-group full-width">
+                    <button type="button" class="btn-test-print" @onclick="OpenTestPrintModal">
+                        <span>🖨️ Uji Cetak Struk Sampel</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="settings-actions-footer">
+        <button type="button" class="btn-save-settings" @onclick="HandleSave">
+            <span>💾 Simpan Semua Pengaturan</span>
+        </button>
+    </div>
+</div>
+
+<!-- TEST RECEIPT MODAL -->
+<ReceiptModal IsOpen="isTestReceiptOpen"
+              Order="sampleOrderForTest"
+              OnClose="@(() => isTestReceiptOpen = false)" />
+
+<style>
+.settings-page-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    max-width: 900px;
+}
+
+.settings-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.save-success-alert {
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    color: #34d399;
+    padding: 12px 18px;
+    border-radius: 14px;
+    font-weight: 700;
+    font-size: 0.9rem;
+}
+
+.settings-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.settings-card {
+    background: rgba(26, 34, 52, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 18px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.card-icon {
+    font-size: 1.4rem;
+}
+
+.card-title {
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: #f1f5f9;
+    margin: 0;
+}
+
+.input-with-suffix {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.suffix {
+    position: absolute;
+    right: 12px;
+    color: #94a3b8;
+    font-weight: 700;
+}
+
+.field-hint {
+    display: block;
+    font-size: 0.72rem;
+    color: #64748b;
+    margin-top: 4px;
+}
+
+.btn-test-print {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #cbd5e1;
+    font-weight: 700;
+    padding: 10px 16px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-test-print:hover {
+    background: rgba(255, 255, 255, 0.18);
+    color: #fff;
+}
+
+.settings-actions-footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 10px;
+}
+
+.btn-save-settings {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: #000;
+    font-weight: 800;
+    font-size: 0.95rem;
+    padding: 12px 28px;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(245, 158, 11, 0.35);
+    transition: transform 0.15s;
+}
+
+.btn-save-settings:hover {
+    transform: translateY(-2px);
+}
+</style>
+
+@code {
+    private string storeName = "Kedai J.A";
+    private string address = "Jl. Senopati No. 45, Kebayoran Baru, Jakarta Selatan";
+    private decimal taxRatePercent = 10m;
+    private decimal serviceChargePercent = 5m;
+    private int thermalPaperWidthMm = 58;
+    private bool autoPrintReceipt = false;
+    private bool savedNotification = false;
+
+    private bool isTestReceiptOpen = false;
+    private AdminOrderDto? sampleOrderForTest;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var s = await AdminService.GetStoreSettingsAsync();
+        if (s != null)
+        {
+            storeName = s.StoreName;
+            address = s.Address;
+            taxRatePercent = s.TaxRatePercent;
+            serviceChargePercent = s.ServiceChargePercent;
+            thermalPaperWidthMm = s.ThermalPaperWidthMm;
+            autoPrintReceipt = s.AutoPrintReceipt;
+        }
+    }
+
+    private async Task HandleSave()
+    {
+        var settings = new StoreSettingsDto(
+            StoreName: storeName.Trim(),
+            Address: address.Trim(),
+            TaxRatePercent: taxRatePercent,
+            ServiceChargePercent: serviceChargePercent,
+            ThermalPaperWidthMm: thermalPaperWidthMm,
+            AutoPrintReceipt: autoPrintReceipt
+        );
+
+        await AdminService.SaveStoreSettingsAsync(settings);
+        savedNotification = true;
+        await Task.Delay(3000);
+        savedNotification = false;
+        StateHasChanged();
+    }
+
+    private void OpenTestPrintModal()
+    {
+        sampleOrderForTest = new AdminOrderDto(
+            OrderNumber: "ORD-TEST-001",
+            SessionId: "sess-test",
+            TableNumber: "T-05",
+            OrderType: "DineIn",
+            CustomerName: "Pelanggan Demo",
+            CustomerNotes: "Uji coba printer kasir",
+            Status: "Completed",
+            Subtotal: 50000m,
+            TaxAmount: 50000m * (taxRatePercent / 100m),
+            ServiceCharge: 50000m * (serviceChargePercent / 100m),
+            GrandTotal: 50000m + (50000m * (taxRatePercent / 100m)) + (50000m * (serviceChargePercent / 100m)),
+            PaymentMethod: "QRIS",
+            IsPaid: true,
+            CreatedAtUtc: DateTime.UtcNow,
+            Items: new List<AdminOrderItemDto>
+            {
+                new("c01", "Kopi Susu Gula Aren", 2, 22000m, 44000m, "Regular, Normal Ice", null),
+                new("s01", "Cireng Crispy", 1, 6000m, 6000m, "Standard", null)
+            }
+        );
+        isTestReceiptOpen = true;
+    }
+}

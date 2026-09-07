@@ -1,0 +1,162 @@
+@using PosSelfOrdering.Client.DTOs.Menu
+@using PosSelfOrdering.Client.Extensions
+@using PosSelfOrdering.Client.Components.Common
+@using PosSelfOrdering.Client.Components.Menu
+
+@if (IsOpen && Item != null)
+{
+    <div class="modal-backdrop" @onclick="Close">
+        <div class="modal-container" @onclick:stopPropagation="true">
+            <!-- Modal Header -->
+            <div class="modal-header">
+                <h3 style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary);">Kustomisasi Pesanan</h3>
+                <button type="button" class="btn btn-ghost btn-icon" style="width: 32px; height: 32px;" @onclick="Close">
+                    ✕
+                </button>
+            </div>
+
+            <!-- Modal Body -->
+            <div class="modal-body">
+                <!-- Item Hero Info -->
+                <div style="display: flex; gap: 14px; align-items: center; border-bottom: 1px solid var(--border-subtle); padding-bottom: 14px;">
+                    <img src="@Item.ImageUrl" alt="@Item.Name" style="width: 80px; height: 80px; border-radius: var(--radius-md); object-fit: cover; background: var(--bg-surface-elevated);" />
+                    <div>
+                        <h4 style="font-size: 1.05rem; font-weight: 700; color: var(--text-primary);">@Item.Name</h4>
+                        <span style="font-size: 1.15rem; font-weight: 800; color: var(--color-primary); display: block; margin-top: 2px;">
+                            @Item.BasePrice.ToIdr()
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Modifier Groups -->
+                @if (Item.ModifierGroups != null && Item.ModifierGroups.Any())
+                {
+                    @foreach (var group in Item.ModifierGroups)
+                    {
+                        <ModifierGroup Group="group"
+                                       SelectedOptions="_selectedOptions"
+                                       SelectedOptionsChanged="HandleOptionsChanged" />
+                    }
+                }
+
+                <!-- Special Notes -->
+                <div class="form-group" style="margin-top: 6px;">
+                    <label class="form-label">Catatan Tambahan (Opsional)</label>
+                    <textarea class="form-textarea" 
+                              rows="2" 
+                              placeholder="Contoh: Kurangi manis, pisahkan sambal..."
+                              @bind="_notes"></textarea>
+                </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="modal-footer">
+                <div style="display: flex; flex-direction: column;">
+                    <span style="font-size: 0.75rem; color: var(--text-muted);">Total Harga:</span>
+                    <span style="font-size: 1.2rem; font-weight: 800; color: var(--color-primary);">
+                        @CalculatedTotal.ToIdr()
+                    </span>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <QuantityPicker Value="@_quantity" ValueChanged="HandleQuantityChanged" MinValue="1" MaxValue="99" />
+
+                    <button type="button" 
+                            class="btn btn-primary" 
+                            disabled="@(!IsValid)" 
+                            @onclick="ConfirmAddToCart">
+                        <span>+ Tambah</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public MenuItemDto? Item { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<(MenuItemDto Item, List<ModifierOptionDto> Options, int Quantity, string Notes)> OnAddToCart { get; set; }
+
+    private List<ModifierOptionDto> _selectedOptions = new();
+    private int _quantity = 1;
+    private string _notes = string.Empty;
+
+    protected override void OnParametersSet()
+    {
+        if (Item != null && IsOpen)
+        {
+            _selectedOptions.Clear();
+            _quantity = 1;
+            _notes = string.Empty;
+
+            // Auto-select defaults
+            if (Item.ModifierGroups != null)
+            {
+                foreach (var grp in Item.ModifierGroups)
+                {
+                    var defaultOpt = grp.Options.FirstOrDefault(o => o.IsDefault);
+                    if (defaultOpt is not null)
+                    {
+                        _selectedOptions.Add(defaultOpt);
+                    }
+                }
+            }
+        }
+    }
+
+    private decimal CalculatedTotal
+    {
+        get
+        {
+            if (Item == null) return 0;
+            var unitPrice = Item.BasePrice + _selectedOptions.Sum(o => o.ExtraPrice);
+            return unitPrice * _quantity;
+        }
+    }
+
+    private bool IsValid
+    {
+        get
+        {
+            if (Item?.ModifierGroups == null) return true;
+
+            foreach (var grp in Item.ModifierGroups.Where(g => g.IsRequired))
+            {
+                var count = _selectedOptions.Count(o => grp.Options.Any(grpOpt => grpOpt.Id == o.Id));
+                if (count < grp.MinSelections) return false;
+            }
+
+            return true;
+        }
+    }
+
+    private void HandleOptionsChanged(List<ModifierOptionDto> updated)
+    {
+        _selectedOptions = updated;
+    }
+
+    private void HandleQuantityChanged(int qty)
+    {
+        _quantity = qty;
+    }
+
+    private async Task ConfirmAddToCart()
+    {
+        if (Item != null && IsValid && OnAddToCart.HasDelegate)
+        {
+            await OnAddToCart.InvokeAsync((Item, _selectedOptions, _quantity, _notes));
+            await Close();
+        }
+    }
+
+    private async Task Close()
+    {
+        IsOpen = false;
+        if (OnClose.HasDelegate)
+        {
+            await OnClose.InvokeAsync();
+        }
+    }
+}

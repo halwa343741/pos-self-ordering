@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="128" fill="#090d16"/>
+  <!-- Crossed Spoon and Fork House Roof -->
+  <g fill="#f59e0b" stroke="#f59e0b" stroke-linecap="round">
+    <path d="M 90 320 L 256 120 L 270 135 L 120 340 Z" fill="#f59e0b" />
+    <path d="M 422 320 L 256 120 L 242 135 L 392 340 Z" fill="#f59e0b" />
+    <!-- Fork details -->
+    <path d="M 180 200 L 180 150 M 170 190 L 170 160 M 190 190 L 190 160 M 160 175 L 200 175" stroke="#f59e0b" stroke-width="8" />
+    <!-- Spoon bowl -->
+    <ellipse cx="335" cy="180" rx="24" ry="36" fill="#f59e0b" />
+  </g>
+  <text x="256" y="390" font-family="'Plus Jakarta Sans', Arial, sans-serif" font-size="76" font-weight="900" font-style="italic" text-anchor="middle" fill="#ffffff" stroke="#f59e0b" stroke-width="6">Kedai J.A</text>
+  <text x="256" y="390" font-family="'Plus Jakarta Sans', Arial, sans-serif" font-size="76" font-weight="900" font-style="italic" text-anchor="middle" fill="#ffffff">Kedai J.A</text>
+</svg>

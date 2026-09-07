@@ -1,0 +1,193 @@
+@using PosSelfOrdering.Client.State
+@inject SessionState Session
+@inject CartState Cart
+@inject NavigationManager Nav
+@implements IDisposable
+
+<header class="glass-header">
+    <div class="header-nav">
+        <div class="brand-info" @onclick="GoHome" style="cursor: pointer; display: flex; align-items: center; gap: 10px;">
+            <div style="height: 38px; display: flex; align-items: center; justify-content: center;">
+                <img src="images/logo-kedai-ja.svg" alt="Kedai J.A" style="height: 38px; width: auto; object-fit: contain;" />
+            </div>
+            <div class="brand-details">
+                <h1 style="font-size: 1.05rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.01em;">
+                    @(Session.CurrentSession?.StoreName ?? "Kedai J.A")
+                </h1>
+                @if (Session.HasActiveSession)
+                {
+                    <span class="table-chip" 
+                          @onclick="OpenChangeTableModal" 
+                          @onclick:stopPropagation="true"
+                          title="Klik untuk mengubah nomor meja" 
+                          style="cursor: pointer; transition: all var(--transition-fast);">
+                        <span style="font-size: 0.7rem;">📍</span>
+                        <span>@(Session.CurrentSession?.OrderType == "Takeaway" ? "Takeaway" : $"Meja {Session.CurrentSession?.TableNumber}")</span>
+                        <span style="font-size: 0.75rem; opacity: 0.7;">✏️</span>
+                    </span>
+                }
+            </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 8px;">
+            @if (ShowBackButton)
+            {
+                <button class="btn btn-ghost btn-icon" @onclick="GoBack" title="Kembali">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="m15 18-6-6 6-6"/>
+                    </svg>
+                </button>
+            }
+
+            @if (!Cart.IsEmpty)
+            {
+                <button class="btn btn-primary btn-sm" @onclick='() => Nav.NavigateTo("/cart")' style="position: relative; display: flex; align-items: center; gap: 6px; padding: 6px 14px; font-weight: 700;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <circle cx="8" cy="21" r="1"/>
+                        <circle cx="19" cy="21" r="1"/>
+                        <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/>
+                    </svg>
+                    <span>Keranjang (@Cart.TotalItemCount)</span>
+                </button>
+            }
+
+            <NavLink href="/kiosk-settings" class="btn btn-ghost btn-icon" title="Pengaturan Kiosk">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                </svg>
+            </NavLink>
+        </div>
+    </div>
+</header>
+
+<!-- Modal Ubah Nomor Meja / Tipe Pesanan -->
+@if (_isModalOpen)
+{
+    <div class="modal-backdrop" @onclick="CloseModal">
+        <div class="modal-container" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h3 style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary);">Ubah Nomor Meja / Tipe</h3>
+                <button type="button" class="btn btn-ghost btn-icon" style="width: 32px; height: 32px;" @onclick="CloseModal">
+                    ✕
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Tipe Pemesanan</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <button type="button" 
+                                class="btn @(_tempOrderType == "DineIn" ? "btn-primary" : "btn-secondary")"
+                                @onclick='() => _tempOrderType = "DineIn"'>
+                            <span>🪑 Dine-In</span>
+                        </button>
+                        <button type="button" 
+                                class="btn @(_tempOrderType == "Takeaway" ? "btn-primary" : "btn-secondary")"
+                                @onclick='() => _tempOrderType = "Takeaway"'>
+                            <span>🛍️ Takeaway</span>
+                        </button>
+                    </div>
+                </div>
+
+                @if (_tempOrderType == "DineIn")
+                {
+                    <div class="form-group animate-fade-in">
+                        <label class="form-label">Nomor Meja Baru</label>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" 
+                                   class="form-input" 
+                                   style="font-size: 1.2rem; font-weight: 800; text-transform: uppercase;"
+                                   placeholder="Contoh: T-05" 
+                                   @bind="_tempTableNumber" />
+                            <button type="button" class="btn btn-secondary" style="white-space: nowrap;" @onclick="SimulateScan">
+                                <span>📷 Scan</span>
+                            </button>
+                        </div>
+                    </div>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(_modalError))
+                {
+                    <div style="color: #f87171; font-size: 0.85rem;">@_modalError</div>
+                }
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost" @onclick="CloseModal">
+                    Batal
+                </button>
+                <button type="button" class="btn btn-primary" @onclick="SaveTableChange">
+                    Simpan Perubahan
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool ShowBackButton { get; set; } = false;
+
+    private bool _isModalOpen = false;
+    private string _tempOrderType = "DineIn";
+    private string _tempTableNumber = "T-05";
+    private string? _modalError;
+
+    protected override void OnInitialized()
+    {
+        Cart.OnChange += StateHasChanged;
+        Session.OnChange += StateHasChanged;
+    }
+
+    private void OpenChangeTableModal()
+    {
+        if (Session.CurrentSession != null)
+        {
+            _tempOrderType = Session.CurrentSession.OrderType;
+            _tempTableNumber = Session.CurrentSession.TableNumber;
+        }
+        _modalError = null;
+        _isModalOpen = true;
+    }
+
+    private void CloseModal()
+    {
+        _isModalOpen = false;
+    }
+
+    private void SimulateScan()
+    {
+        _tempTableNumber = $"T-0{Random.Shared.Next(1, 9)}";
+    }
+
+    private void SaveTableChange()
+    {
+        if (_tempOrderType == "DineIn" && string.IsNullOrWhiteSpace(_tempTableNumber))
+        {
+            _modalError = "Silakan masukkan nomor meja yang valid.";
+            return;
+        }
+
+        Session.UpdateTable(_tempTableNumber, _tempOrderType);
+        _isModalOpen = false;
+    }
+
+    private void GoHome()
+    {
+        if (Session.HasActiveSession)
+            Nav.NavigateTo("/menu");
+        else
+            Nav.NavigateTo("/");
+    }
+
+    private void GoBack()
+    {
+        Nav.NavigateTo("javascript:history.back()");
+    }
+
+    public void Dispose()
+    {
+        Cart.OnChange -= StateHasChanged;
+        Session.OnChange -= StateHasChanged;
+    }
+}

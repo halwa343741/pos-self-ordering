@@ -1,0 +1,50 @@
+@using PosSelfOrdering.Client.DTOs.Menu
+@using PosSelfOrdering.Client.Extensions
+
+<div class="menu-card @(!Item.IsAvailable ? "sold-out" : "") animate-fade-in" @onclick="HandleSelect">
+    <div class="menu-card-img-wrap">
+        <img src="@Item.ImageUrl" alt="@Item.Name" class="menu-card-img" loading="lazy" />
+        
+        <div class="menu-card-badges">
+            @if (Item.IsBestSeller)
+            {
+                <span class="badge badge-primary">⭐ Best Seller</span>
+            }
+            @if (Item.IsSpicy)
+            {
+                <span class="badge badge-danger">🌶️ Pedas</span>
+            }
+            @if (!Item.IsAvailable)
+            {
+                <span class="badge badge-danger">Habis</span>
+            }
+        </div>
+    </div>
+
+    <div class="menu-card-body">
+        <div>
+            <h3 class="menu-card-title">@Item.Name</h3>
+            <p class="menu-card-desc">@Item.Description</p>
+        </div>
+
+        <div class="menu-card-footer">
+            <span class="menu-card-price">@Item.BasePrice.ToIdr()</span>
+            <button type="button" class="menu-card-add-btn" disabled="@(!Item.IsAvailable)" aria-label="Pilih menu @Item.Name">
+                +
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public MenuItemDto Item { get; set; } = default!;
+    [Parameter] public EventCallback<MenuItemDto> OnSelect { get; set; }
+
+    private async Task HandleSelect()
+    {
+        if (Item.IsAvailable && OnSelect.HasDelegate)
+        {
+            await OnSelect.InvokeAsync(Item);
+        }
+    }
+}

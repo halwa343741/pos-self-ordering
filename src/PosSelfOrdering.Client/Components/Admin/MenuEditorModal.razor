@@ -1,0 +1,572 @@
+@using PosSelfOrdering.Client.DTOs.Admin
+@using PosSelfOrdering.Client.DTOs.Menu
+@using PosSelfOrdering.Client.Extensions
+
+@if (IsOpen)
+{
+    <div class="modal-backdrop" @onclick="Close">
+        <div class="menu-editor-container glass-panel" @onclick:stopPropagation>
+            <div class="modal-header">
+                <div class="header-left">
+                    <span class="header-icon">@(isEditMode ? "✏️" : "✨")</span>
+                    <h3>@(isEditMode ? "Edit Menu Hidangan" : "Tambah Menu Baru")</h3>
+                </div>
+                <button type="button" class="close-btn" @onclick="Close">✕</button>
+            </div>
+
+            <div class="modal-body">
+                @if (!string.IsNullOrWhiteSpace(validationError))
+                {
+                    <div class="error-banner">
+                        <span>⚠️ @validationError</span>
+                    </div>
+                }
+
+                <!-- BASIC DETAILS -->
+                <div class="form-section">
+                    <h4 class="section-title">Informasi Utama</h4>
+                    <div class="form-grid">
+                        <div class="form-group full-width">
+                            <label class="field-label">Nama Menu *</label>
+                            <input type="text" class="form-input" placeholder="Contoh: Kopi Susu Aren Spesial" @bind="name" />
+                        </div>
+
+                        <div class="form-group">
+                            <label class="field-label">Kategori *</label>
+                            <select class="form-select" @bind="categoryId">
+                                @foreach (var cat in Categories)
+                                {
+                                    <option value="@cat.Id">@cat.Name</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="field-label">Harga Dasar (Rp) *</label>
+                            <input type="number" class="form-input" placeholder="25000" @bind="basePrice" />
+                        </div>
+
+                        <div class="form-group full-width">
+                            <label class="field-label">URL Foto Menu</label>
+                            <div class="input-with-preview">
+                                <input type="text" class="form-input" placeholder="https://..." @bind="imageUrl" />
+                                @if (!string.IsNullOrWhiteSpace(imageUrl))
+                                {
+                                    <img src="@imageUrl" alt="Preview" class="img-mini-preview" />
+                                }
+                            </div>
+                        </div>
+
+                        <div class="form-group full-width">
+                            <label class="field-label">Deskripsi Menu</label>
+                            <textarea class="form-textarea" rows="2" placeholder="Jelaskan cita rasa dan bahan menu..." @bind="description"></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- BADGES & STOCK -->
+                <div class="form-section">
+                    <h4 class="section-title">Status & Badge</h4>
+                    <div class="checkbox-row">
+                        <label class="checkbox-label">
+                            <input type="checkbox" @bind="isAvailable" />
+                            <span>🟢 Menu Tersedia (Stok Ready)</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" @bind="isBestSeller" />
+                            <span>⭐ Best Seller</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" @bind="isSpicy" />
+                            <span>🌶️ Pedas</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- MODIFIER GROUPS -->
+                <div class="form-section">
+                    <div class="section-header-row">
+                        <h4 class="section-title">Grup Kustomisasi / Modifier (@modifierGroups.Count)</h4>
+                        <button type="button" class="btn-add-sm" @onclick="AddNewModifierGroup">+ Tambah Grup</button>
+                    </div>
+
+                    @if (!modifierGroups.Any())
+                    {
+                        <div class="empty-modifiers-hint">
+                            <span>Belum ada grup kustomisasi (contoh: Pilihan Ukuran, Level Es/Gula, Topping).</span>
+                        </div>
+                    }
+                    else
+                    {
+                        @for (int gIdx = 0; gIdx < modifierGroups.Count; gIdx++)
+                        {
+                            var groupIndex = gIdx;
+                            var group = modifierGroups[groupIndex];
+
+                            <div class="mod-group-card">
+                                <div class="mod-group-header">
+                                    <div class="group-title-inputs">
+                                        <input type="text" class="form-input-sm" placeholder="Nama Grup (e.g. Ukuran)"
+                                               value="@group.Name"
+                                               @onchange="@(e => UpdateGroupName(groupIndex, e.Value?.ToString() ?? ""))" />
+                                        <select class="form-select-sm"
+                                                value="@(group.MaxSelections > 1 ? "Multiple" : "Single")"
+                                                @onchange="@(e => UpdateGroupType(groupIndex, e.Value?.ToString() ?? "Single"))">
+                                            <option value="Single">Pilih 1 (Single)</option>
+                                            <option value="Multiple">Pilih Banyak (Multiple)</option>
+                                        </select>
+                                    </div>
+                                    <button type="button" class="btn-delete-icon" @onclick="@(() => RemoveModifierGroup(groupIndex))" title="Hapus Grup">✕</button>
+                                </div>
+
+                                <div class="mod-options-list">
+                                    <span class="options-subhead">Pilihan Opsi:</span>
+                                    @for (int oIdx = 0; oIdx < group.Options.Count; oIdx++)
+                                    {
+                                        var optIndex = oIdx;
+                                        var opt = group.Options[optIndex];
+
+                                        <div class="mod-option-row">
+                                            <input type="text" class="form-input-sm opt-name" placeholder="Nama Opsi (e.g. Large)"
+                                                   value="@opt.Name"
+                                                   @onchange="@(e => UpdateOptionName(groupIndex, optIndex, e.Value?.ToString() ?? ""))" />
+                                            <div class="opt-price-box">
+                                                <span class="currency-prefix">+Rp</span>
+                                                <input type="number" class="form-input-sm opt-price" placeholder="0"
+                                                       value="@opt.ExtraPrice"
+                                                       @onchange="@(e => UpdateOptionPrice(groupIndex, optIndex, decimal.TryParse(e.Value?.ToString(), out var p) ? p : 0m))" />
+                                            </div>
+                                            <button type="button" class="btn-delete-opt" @onclick="@(() => RemoveOption(groupIndex, optIndex))">✕</button>
+                                        </div>
+                                    }
+                                    <button type="button" class="btn-add-opt" @onclick="@(() => AddOptionToGroup(groupIndex))">+ Tambah Opsi</button>
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn-cancel" @onclick="Close">Batal</button>
+                <button type="button" class="btn-save" @onclick="HandleSave">
+                    <span>💾 Simpan Menu</span>
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+.menu-editor-container {
+    background: #1e293b;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 20px;
+    max-width: 620px;
+    width: 100%;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
+}
+
+.modal-body {
+    padding: 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.error-banner {
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    color: #fca5a5;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 0.85rem;
+}
+
+.form-section {
+    background: rgba(15, 23, 42, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 14px;
+    padding: 16px;
+}
+
+.section-title {
+    font-size: 0.9rem;
+    font-weight: 800;
+    color: #f1f5f9;
+    margin: 0 0 12px 0;
+}
+
+.section-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+}
+
+.form-group.full-width {
+    grid-column: span 2;
+}
+
+.field-label {
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #94a3b8;
+    margin-bottom: 4px;
+}
+
+.form-input, .form-select, .form-textarea {
+    width: 100%;
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 10px;
+    padding: 9px 12px;
+    color: #fff;
+    font-size: 0.88rem;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.form-input:focus, .form-select:focus, .form-textarea:focus {
+    border-color: #fbbf24;
+}
+
+.input-with-preview {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.img-mini-preview {
+    width: 42px;
+    height: 42px;
+    border-radius: 8px;
+    object-fit: cover;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.checkbox-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #cbd5e1;
+    cursor: pointer;
+}
+
+.btn-add-sm {
+    background: rgba(245, 158, 11, 0.15);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    color: #fbbf24;
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.empty-modifiers-hint {
+    font-size: 0.8rem;
+    color: #64748b;
+    padding: 8px 0;
+}
+
+.mod-group-card {
+    background: rgba(30, 41, 59, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 12px;
+    margin-bottom: 10px;
+}
+
+.mod-group-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.group-title-inputs {
+    display: flex;
+    gap: 8px;
+    flex: 1;
+}
+
+.form-input-sm, .form-select-sm {
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    padding: 6px 8px;
+    color: #fff;
+    font-size: 0.8rem;
+}
+
+.btn-delete-icon {
+    background: transparent;
+    border: none;
+    color: #f87171;
+    cursor: pointer;
+    font-size: 1rem;
+}
+
+.options-subhead {
+    display: block;
+    font-size: 0.72rem;
+    color: #94a3b8;
+    margin-bottom: 6px;
+}
+
+.mod-options-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-left: 8px;
+    border-left: 2px solid rgba(245, 158, 11, 0.3);
+}
+
+.mod-option-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.opt-name {
+    flex: 2;
+}
+
+.opt-price-box {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+}
+
+.currency-prefix {
+    font-size: 0.75rem;
+    color: #94a3b8;
+}
+
+.opt-price {
+    width: 100%;
+}
+
+.btn-delete-opt {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+}
+
+.btn-add-opt {
+    background: transparent;
+    border: 1px dashed rgba(255, 255, 255, 0.15);
+    color: #94a3b8;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    margin-top: 4px;
+    align-self: flex-start;
+}
+
+.btn-add-opt:hover {
+    color: #f3f4f6;
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.btn-save {
+    flex: 2;
+    padding: 10px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    border: none;
+    color: #000;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(245, 158, 11, 0.35);
+}
+</style>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public MenuItemDto? ExistingItem { get; set; }
+    [Parameter] public IReadOnlyList<CategoryDto> Categories { get; set; } = Array.Empty<CategoryDto>();
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<UpsertMenuItemRequest> OnSave { get; set; }
+
+    private bool isEditMode => ExistingItem != null;
+
+    private string name = "";
+    private string categoryId = "";
+    private decimal basePrice = 20000m;
+    private string imageUrl = "";
+    private string description = "";
+    private bool isAvailable = true;
+    private bool isBestSeller = false;
+    private bool isSpicy = false;
+    private List<ModifierGroupDto> modifierGroups = new();
+    private string? validationError;
+
+    protected override void OnParametersSet()
+    {
+        if (ExistingItem != null)
+        {
+            name = ExistingItem.Name;
+            categoryId = ExistingItem.CategoryId;
+            basePrice = ExistingItem.BasePrice;
+            imageUrl = ExistingItem.ImageUrl;
+            description = ExistingItem.Description;
+            isAvailable = ExistingItem.IsAvailable;
+            isBestSeller = ExistingItem.IsBestSeller;
+            isSpicy = ExistingItem.IsSpicy;
+            modifierGroups = ExistingItem.ModifierGroups != null
+                ? ExistingItem.ModifierGroups.Select(g => new ModifierGroupDto(
+                    g.Id, g.Name, g.IsRequired, g.MinSelections, g.MaxSelections,
+                    g.Options.Select(o => new ModifierOptionDto(o.Id, o.Name, o.ExtraPrice, o.IsDefault)).ToList()
+                  )).ToList()
+                : new List<ModifierGroupDto>();
+        }
+        else
+        {
+            name = "";
+            categoryId = Categories.FirstOrDefault()?.Id ?? "cat-coffee";
+            basePrice = 20000m;
+            imageUrl = "https://images.unsplash.com/photo-1541167760496-1628856ab772?w=500&auto=format&fit=crop&q=60";
+            description = "";
+            isAvailable = true;
+            isBestSeller = false;
+            isSpicy = false;
+            modifierGroups = new List<ModifierGroupDto>();
+        }
+        validationError = null;
+    }
+
+    private void AddNewModifierGroup()
+    {
+        var newGroupId = $"grp_{Guid.NewGuid():N}"[..6];
+        modifierGroups.Add(new ModifierGroupDto(
+            Id: newGroupId,
+            Name: "Pilihan Tambahan",
+            IsRequired: false,
+            MinSelections: 1,
+            MaxSelections: 1,
+            Options: new List<ModifierOptionDto>
+            {
+                new($"opt_{Guid.NewGuid():N}"[..6], "Standar", 0m, true)
+            }
+        ));
+    }
+
+    private void RemoveModifierGroup(int index)
+    {
+        if (index >= 0 && index < modifierGroups.Count)
+        {
+            modifierGroups.RemoveAt(index);
+        }
+    }
+
+    private void UpdateGroupName(int groupIndex, string newName)
+    {
+        var g = modifierGroups[groupIndex];
+        modifierGroups[groupIndex] = g with { Name = newName };
+    }
+
+    private void UpdateGroupType(int groupIndex, string newType)
+    {
+        var g = modifierGroups[groupIndex];
+        modifierGroups[groupIndex] = g with
+        {
+            IsRequired = newType == "Single",
+            MinSelections = newType == "Single" ? 1 : 0,
+            MaxSelections = newType == "Single" ? 1 : 5
+        };
+    }
+
+    private void AddOptionToGroup(int groupIndex)
+    {
+        var g = modifierGroups[groupIndex];
+        var opts = g.Options.ToList();
+        opts.Add(new ModifierOptionDto($"opt_{Guid.NewGuid():N}"[..6], "Opsi Baru", 0m, false));
+        modifierGroups[groupIndex] = g with { Options = opts };
+    }
+
+    private void RemoveOption(int groupIndex, int optionIndex)
+    {
+        var g = modifierGroups[groupIndex];
+        var opts = g.Options.ToList();
+        if (optionIndex >= 0 && optionIndex < opts.Count)
+        {
+            opts.RemoveAt(optionIndex);
+            modifierGroups[groupIndex] = g with { Options = opts };
+        }
+    }
+
+    private void UpdateOptionName(int groupIndex, int optionIndex, string newName)
+    {
+        var g = modifierGroups[groupIndex];
+        var opts = g.Options.ToList();
+        opts[optionIndex] = opts[optionIndex] with { Name = newName };
+        modifierGroups[groupIndex] = g with { Options = opts };
+    }
+
+    private void UpdateOptionPrice(int groupIndex, int optionIndex, decimal newPrice)
+    {
+        var g = modifierGroups[groupIndex];
+        var opts = g.Options.ToList();
+        opts[optionIndex] = opts[optionIndex] with { ExtraPrice = newPrice };
+        modifierGroups[groupIndex] = g with { Options = opts };
+    }
+
+    private async Task Close() => await OnClose.InvokeAsync();
+
+    private async Task HandleSave()
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            validationError = "Nama menu wajib diisi.";
+            return;
+        }
+
+        if (basePrice < 0)
+        {
+            validationError = "Harga dasar tidak boleh negatif.";
+            return;
+        }
+
+        var request = new UpsertMenuItemRequest(
+            Id: ExistingItem?.Id,
+            CategoryId: categoryId,
+            Name: name.Trim(),
+            Description: description.Trim(),
+            BasePrice: basePrice,
+            ImageUrl: imageUrl.Trim(),
+            IsAvailable: isAvailable,
+            IsBestSeller: isBestSeller,
+            IsSpicy: isSpicy,
+            ModifierGroups: modifierGroups
+        );
+
+        await OnSave.InvokeAsync(request);
+        await Close();
+    }
+}

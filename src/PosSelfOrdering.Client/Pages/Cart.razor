@@ -1,0 +1,125 @@
+@page "/cart"
+@using PosSelfOrdering.Client.State
+@using PosSelfOrdering.Client.Services
+@using PosSelfOrdering.Client.Extensions
+@using PosSelfOrdering.Client.Components.Common
+@using PosSelfOrdering.Client.Components.Cart
+@inject ICartService CartService
+@inject CartState CartStore
+@inject NavigationManager Nav
+@implements IDisposable
+
+<div class="animate-fade-in" style="max-width: 600px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px;">
+    <!-- Page Header -->
+    <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-subtle); padding-bottom: 12px;">
+        <div>
+            <h2>Keranjang Pesanan</h2>
+            <p style="font-size: 0.85rem; margin: 0;">Periksa kembali rincian menu sebelum melakukan checkout.</p>
+        </div>
+
+        @if (!CartStore.IsEmpty)
+        {
+            <button class="btn btn-ghost btn-sm" style="color: var(--color-danger);" @onclick="CartService.ClearCart">
+                Kosongkan
+            </button>
+        }
+    </div>
+
+    @if (CartStore.IsEmpty)
+    {
+        <div class="glass-panel" style="padding: 40px 20px;">
+            <EmptyState Title="Keranjang Anda Kosong"
+                        Description="Belum ada makanan atau minuman yang ditambahkan. Silakan pilih menu lezat kami."
+                        ActionText="Jelajahi Menu Sekarang"
+                        OnAction="GoToMenu" />
+        </div>
+    }
+    else
+    {
+        <!-- Cart Items List -->
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+            @foreach (var item in CartStore.Items)
+            {
+                <CartItemRow Item="item"
+                             OnQuantityChanged="(newQty) => CartService.UpdateQuantity(item.CartItemId, newQty)"
+                             OnRemove="(id) => CartService.RemoveItem(id)" />
+            }
+        </div>
+
+        <!-- Voucher Code Input Box -->
+        <div class="glass-panel" style="padding: 14px 16px; display: flex; gap: 10px; align-items: center;">
+            <div style="font-size: 1.3rem;">🏷️</div>
+            <input type="text" 
+                   class="form-input" 
+                   style="flex: 1; text-transform: uppercase; font-weight: 700;" 
+                   placeholder="Kode Promo (Contoh: DISKON10)" 
+                   @bind="_voucherCode" />
+            <button class="btn btn-secondary btn-sm" @onclick="ApplyVoucher">
+                Gunakan
+            </button>
+        </div>
+
+        @if (_appliedDiscount > 0)
+        {
+            <div style="background: var(--color-success-bg); color: var(--color-success); border: 1px solid rgba(16, 185, 129, 0.3); padding: 8px 14px; border-radius: var(--radius-sm); font-size: 0.85rem; font-weight: 600;">
+                🎉 Voucher aktif! Hemat @_appliedDiscount.ToIdr()
+            </div>
+        }
+
+        <!-- Price Breakdown -->
+        <PriceBreakdown Subtotal="@CartStore.Subtotal"
+                        Discount="@_appliedDiscount"
+                        Tax="@CartStore.Tax"
+                        ServiceCharge="@CartStore.ServiceCharge"
+                        GrandTotal="@CalculatedGrandTotal" />
+
+        <!-- Navigation Action Buttons -->
+        <div style="display: flex; gap: 12px; margin-top: 10px;">
+            <button class="btn btn-secondary" style="flex: 1;" @onclick="GoToMenu">
+                + Tambah Menu
+            </button>
+            <button class="btn btn-primary" style="flex: 1.5; font-size: 1.05rem;" @onclick="GoToCheckout">
+                Lanjut Pembayaran ➔
+            </button>
+        </div>
+    }
+</div>
+
+@code {
+    private string _voucherCode = string.Empty;
+    private decimal _appliedDiscount = 0;
+
+    protected override void OnInitialized()
+    {
+        CartStore.OnChange += StateHasChanged;
+    }
+
+    private decimal CalculatedGrandTotal => Math.Max(0, CartStore.GrandTotal - _appliedDiscount);
+
+    private void ApplyVoucher()
+    {
+        if (_voucherCode.Trim().Equals("DISKON10", StringComparison.OrdinalIgnoreCase))
+        {
+            _appliedDiscount = 10000;
+        }
+        else if (!string.IsNullOrWhiteSpace(_voucherCode))
+        {
+            _appliedDiscount = 5000;
+        }
+    }
+
+    private void GoToMenu()
+    {
+        Nav.NavigateTo("/menu");
+    }
+
+    private void GoToCheckout()
+    {
+        Nav.NavigateTo("/checkout");
+    }
+
+    public void Dispose()
+    {
+        CartStore.OnChange -= StateHasChanged;
+    }
+}

@@ -1,0 +1,595 @@
+@page "/admin/reports"
+@layout AdminLayout
+@inject IAdminService AdminService
+@inject SharedPosDataStore Store
+@inject BroadcastChannelService Broadcast
+@implements IDisposable
+
+<div class="reports-page-container">
+    <!-- HEADER -->
+    <div class="reports-header">
+        <div class="header-titles">
+            <h1 class="page-title">Laporan Penjualan & Analytics</h1>
+            <p class="page-subtitle">Ringkasan finansial harian, omzet, dan metode pembayaran Kedai J.A</p>
+        </div>
+
+        <div class="header-date-badge">
+            <span class="cal-icon">📅</span>
+            <span class="cal-text">Hari Ini, @DateTime.Now.ToString("dd MMMM yyyy")</span>
+        </div>
+    </div>
+
+    @if (summary == null)
+    {
+        <div class="loading-state">
+            <div class="spinner-lg"></div>
+            <span>Memuat data laporan...</span>
+        </div>
+    }
+    else
+    {
+        <!-- STAT CARDS -->
+        <div class="stat-cards-grid">
+            <div class="stat-card revenue glass-panel">
+                <div class="stat-icon-wrapper rev-icon">💰</div>
+                <div class="stat-content">
+                    <span class="stat-label">Total Omzet Hari Ini</span>
+                    <span class="stat-value highlight-gold">@summary.TotalRevenueToday.ToIdr()</span>
+                    <span class="stat-subtext">Dari pesanan berbayar</span>
+                </div>
+            </div>
+
+            <div class="stat-card orders glass-panel">
+                <div class="stat-icon-wrapper orders-icon">📦</div>
+                <div class="stat-content">
+                    <span class="stat-label">Total Pesanan Sukses</span>
+                    <span class="stat-value">@summary.TotalOrdersCount pesanan</span>
+                    <span class="stat-subtext">Status Lunas / Selesai</span>
+                </div>
+            </div>
+
+            <div class="stat-card aov glass-panel">
+                <div class="stat-icon-wrapper aov-icon">📈</div>
+                <div class="stat-content">
+                    <span class="stat-label">Rata-rata Transaksi (AOV)</span>
+                    <span class="stat-value highlight-blue">@summary.AverageOrderValue.ToIdr()</span>
+                    <span class="stat-subtext">Per tiket pesanan</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- CHARTS / BREAKDOWNS SECTION -->
+        <div class="analytics-split-section">
+            <!-- PAYMENT METHODS BREAKDOWN -->
+            <div class="analytics-card glass-panel">
+                <div class="card-title-row">
+                    <span class="card-title-icon">💳</span>
+                    <h3 class="card-heading">Metode Pembayaran</h3>
+                </div>
+
+                <div class="payment-bars-list">
+                    @if (summary.RevenueByPaymentMethod != null && summary.RevenueByPaymentMethod.Any())
+                    {
+                        @foreach (var kvp in summary.RevenueByPaymentMethod)
+                        {
+                            var pct = summary.TotalRevenueToday > 0 ? (kvp.Value / summary.TotalRevenueToday) * 100m : 0m;
+                            <div class="payment-bar-item">
+                                <div class="bar-header">
+                                    <span class="method-name">@GetPaymentMethodLabel(kvp.Key)</span>
+                                    <span class="method-val">@kvp.Value.ToIdr() (@pct.ToString("F1")%)</span>
+                                </div>
+                                <div class="bar-track">
+                                    <div class="bar-fill @GetPaymentBarClass(kvp.Key)" style="width: @pct.ToString("F0")%"></div>
+                                </div>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <p class="empty-hint">Belum ada data pembayaran hari ini.</p>
+                    }
+                </div>
+            </div>
+
+            <!-- TOP 5 BEST SELLERS -->
+            <div class="analytics-card glass-panel">
+                <div class="card-title-row">
+                    <span class="card-title-icon">🏆</span>
+                    <h3 class="card-heading">Top 5 Menu Terlaris</h3>
+                </div>
+
+                <div class="top-sellers-list">
+                    @if (summary.TopSellingItems != null && summary.TopSellingItems.Any())
+                    {
+                        @for (int i = 0; i < summary.TopSellingItems.Count; i++)
+                        {
+                            var rank = i + 1;
+                            var item = summary.TopSellingItems[i];
+
+                            <div class="top-seller-row">
+                                <div class="rank-badge rank-@rank">#@rank</div>
+                                <div class="seller-meta">
+                                    <span class="seller-name">@item.Name</span>
+                                    <span class="seller-sub">@item.QuantitySold porsi terjual</span>
+                                </div>
+                                <div class="seller-rev">@item.TotalRevenue.ToIdr()</div>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <p class="empty-hint">Belum ada item terjual hari ini.</p>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- TRANSACTIONS HISTORY TABLE -->
+        <div class="transactions-section glass-panel">
+            <div class="trans-header-row">
+                <div class="card-title-row">
+                    <span class="card-title-icon">📜</span>
+                    <h3 class="card-heading">Riwayat Transaksi Harian</h3>
+                </div>
+                <div class="table-counter">
+                    <span>Total Transaksi: <strong>@summary.RecentTransactions.Count</strong></span>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>No. Pesanan</th>
+                            <th>Waktu</th>
+                            <th>Tipe / Meja</th>
+                            <th>Pelanggan</th>
+                            <th>Item Dipesan</th>
+                            <th>Total (IDR)</th>
+                            <th>Metode Bayar</th>
+                            <th>Status</th>
+                            <th>Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!summary.RecentTransactions.Any())
+                        {
+                            <tr>
+                                <td colspan="9" class="text-center empty-td">Belum ada transaksi hari ini.</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var tx in summary.RecentTransactions)
+                            {
+                                <tr>
+                                    <td class="bold-order">@tx.OrderNumber</td>
+                                    <td class="dim-text">@tx.CreatedAtUtc.ToLocalTime().ToString("HH:mm")</td>
+                                    <td>
+                                        <span class="type-pill @(tx.OrderType == "DineIn" ? "dine-in" : "takeaway")">
+                                            @(tx.OrderType == "DineIn" ? $"Meja {tx.TableNumber}" : "Takeaway")
+                                        </span>
+                                    </td>
+                                    <td>@(string.IsNullOrWhiteSpace(tx.CustomerName) ? "-" : tx.CustomerName)</td>
+                                    <td class="items-summary-td">
+                                        @(tx.Items?.Count ?? 0) item (@string.Join(", ", tx.Items?.Take(2).Select(i => $"{i.Quantity}x {i.Name}") ?? Array.Empty<string>()))
+                                    </td>
+                                    <td class="price-val">@tx.GrandTotal.ToIdr()</td>
+                                    <td><span class="pay-method-tag">@tx.PaymentMethod</span></td>
+                                    <td>
+                                        <span class="status-badge @tx.Status.ToLowerInvariant()">
+                                            @GetStatusLabel(tx.Status)
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <button type="button" class="btn-receipt-sm" @onclick="@(() => OpenReceiptModal(tx))" title="Lihat Struk">
+                                            🖨️ Struk
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+<!-- RECEIPT MODAL -->
+<ReceiptModal IsOpen="isReceiptModalOpen"
+              Order="selectedOrderForReceipt"
+              OnClose="@(() => isReceiptModalOpen = false)" />
+
+<style>
+.reports-page-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.reports-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.header-date-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    padding: 8px 16px;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    color: #cbd5e1;
+    font-weight: 700;
+}
+
+/* STAT CARDS */
+.stat-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+}
+
+.stat-card {
+    background: rgba(26, 34, 52, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 18px;
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.stat-icon-wrapper {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.6rem;
+    flex-shrink: 0;
+}
+
+.rev-icon { background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); }
+.orders-icon { background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); }
+.aov-icon { background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); }
+
+.stat-content {
+    display: flex;
+    flex-direction: column;
+}
+
+.stat-label {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #94a3b8;
+    text-transform: uppercase;
+}
+
+.stat-value {
+    font-size: 1.45rem;
+    font-weight: 900;
+    color: #f8fafc;
+    margin: 2px 0;
+}
+
+.highlight-gold { color: #fbbf24; }
+.highlight-blue { color: #38bdf8; }
+
+.stat-subtext {
+    font-size: 0.72rem;
+    color: #64748b;
+}
+
+/* ANALYTICS SPLIT SECTION */
+.analytics-split-section {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px;
+}
+
+.analytics-card {
+    background: rgba(26, 34, 52, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 18px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.card-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.card-title-icon {
+    font-size: 1.2rem;
+}
+
+.card-heading {
+    font-size: 1rem;
+    font-weight: 800;
+    color: #f1f5f9;
+    margin: 0;
+}
+
+/* PAYMENT BARS */
+.payment-bars-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.payment-bar-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.bar-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.method-name { color: #cbd5e1; }
+.method-val { color: #fbbf24; }
+
+.bar-track {
+    height: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.bar-fill {
+    height: 100%;
+    border-radius: 6px;
+    transition: width 0.4s ease;
+}
+
+.bar-qris { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+.bar-cashier { background: linear-gradient(90deg, #10b981, #34d399); }
+.bar-shopeepay { background: linear-gradient(90deg, #f97316, #fb923c); }
+.bar-gopay { background: linear-gradient(90deg, #06b6d4, #22d3ee); }
+.bar-default { background: linear-gradient(90deg, #a855f7, #c084fc); }
+
+/* TOP SELLERS */
+.top-sellers-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.top-seller-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(15, 23, 42, 0.5);
+    padding: 10px 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.rank-badge {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    font-size: 0.82rem;
+}
+
+.rank-1 { background: rgba(245, 158, 11, 0.25); color: #fbbf24; border: 1px solid #f59e0b; }
+.rank-2 { background: rgba(148, 163, 184, 0.25); color: #e2e8f0; border: 1px solid #94a3b8; }
+.rank-3 { background: rgba(180, 83, 9, 0.25); color: #d97706; border: 1px solid #b45309; }
+.rank-4, .rank-5 { background: rgba(255, 255, 255, 0.08); color: #94a3b8; }
+
+.seller-meta {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.seller-name {
+    font-weight: 800;
+    font-size: 0.88rem;
+    color: #f8fafc;
+}
+
+.seller-sub {
+    font-size: 0.72rem;
+    color: #94a3b8;
+}
+
+.seller-rev {
+    font-weight: 800;
+    font-size: 0.88rem;
+    color: #38bdf8;
+}
+
+/* TRANSACTIONS SECTION */
+.transactions-section {
+    background: rgba(26, 34, 52, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 18px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.trans-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.table-counter {
+    font-size: 0.82rem;
+    color: #94a3b8;
+}
+
+.table-responsive {
+    overflow-x: auto;
+}
+
+.admin-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+}
+
+.admin-table th {
+    text-align: left;
+    padding: 10px 12px;
+    color: #94a3b8;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.72rem;
+}
+
+.admin-table td {
+    padding: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    color: #cbd5e1;
+}
+
+.bold-order {
+    font-weight: 800;
+    color: #f1f5f9;
+}
+
+.dim-text {
+    color: #94a3b8;
+}
+
+.type-pill {
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.type-pill.dine-in { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+.type-pill.takeaway { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+
+.price-val {
+    font-weight: 800;
+    color: #fbbf24;
+}
+
+.pay-method-tag {
+    background: rgba(255, 255, 255, 0.08);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+}
+
+.status-badge {
+    font-size: 0.72rem;
+    font-weight: 800;
+    padding: 3px 8px;
+    border-radius: 6px;
+}
+
+.status-badge.pendingpayment { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+.status-badge.cooking { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
+.status-badge.ready { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+.status-badge.completed { background: rgba(107, 114, 128, 0.2); color: #9ca3af; }
+.status-badge.cancelled { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+
+.btn-receipt-sm {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #cbd5e1;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.btn-receipt-sm:hover {
+    background: rgba(255, 255, 255, 0.18);
+    color: #fff;
+}
+</style>
+
+@code {
+    private SalesSummaryDto? summary;
+    private bool isReceiptModalOpen = false;
+    private AdminOrderDto? selectedOrderForReceipt;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Store.OnOrderCreated += OnStoreMutated;
+        Store.OnOrderStatusUpdated += OnStoreOrderUpdated;
+
+        await ReloadSummary();
+    }
+
+    private async Task ReloadSummary()
+    {
+        summary = await AdminService.GetDailySummaryAsync();
+        StateHasChanged();
+    }
+
+    private void OnStoreMutated(AdminOrderDto order) => InvokeAsync(ReloadSummary);
+    private void OnStoreOrderUpdated(string orderNum, string status) => InvokeAsync(ReloadSummary);
+
+    private string GetPaymentMethodLabel(string method) => method switch
+    {
+        "Cashier" => "💵 Tunai di Kasir",
+        "QRIS" => "📱 QRIS Dinamis",
+        "ShopeePay" => "🛍️ ShopeePay",
+        "GoPay" => "🟢 GoPay",
+        "Dana" => "🔵 DANA",
+        "Ovo" => "🟣 OVO",
+        _ => method
+    };
+
+    private string GetPaymentBarClass(string method) => method.ToLowerInvariant() switch
+    {
+        "qris" => "bar-qris",
+        "cashier" => "bar-cashier",
+        "shopeepay" => "bar-shopeepay",
+        "gopay" => "bar-gopay",
+        _ => "bar-default"
+    };
+
+    private string GetStatusLabel(string status) => status switch
+    {
+        "PendingPayment" => "⏳ Kasir",
+        "Cooking" => "🍳 Dimasak",
+        "Ready" => "🔔 Siap",
+        "Completed" => "✓ Selesai",
+        "Cancelled" => "✕ Dibatalkan",
+        _ => status
+    };
+
+    private void OpenReceiptModal(AdminOrderDto order)
+    {
+        selectedOrderForReceipt = order;
+        isReceiptModalOpen = true;
+    }
+
+    public void Dispose()
+    {
+        Store.OnOrderCreated -= OnStoreMutated;
+        Store.OnOrderStatusUpdated -= OnStoreOrderUpdated;
+    }
+}

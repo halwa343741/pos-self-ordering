@@ -1,0 +1,121 @@
+@page "/kiosk-settings"
+@using PosSelfOrdering.Client.State
+@using PosSelfOrdering.Client.Services
+@inject SessionState Session
+@inject NavigationManager Nav
+
+<div class="animate-fade-in" style="max-width: 480px; margin: 20px auto; display: flex; flex-direction: column; gap: 20px;">
+    <div class="glass-panel" style="padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="font-size: 1.8rem;">⚙️</div>
+            <div>
+                <h3 style="margin: 0;">Pengaturan Kiosk</h3>
+                <p style="font-size: 0.82rem; margin: 0; color: var(--text-muted);">Konfigurasi mode perangkat dan nomor meja tetap.</p>
+            </div>
+        </div>
+
+        @if (!_isAuthenticated)
+        {
+            <!-- PIN Authentication Form -->
+            <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 10px;">
+                <label class="form-label">Masukkan PIN Staff / Admin</label>
+                <input type="password" 
+                       class="form-input" 
+                       placeholder="Default PIN: 8888" 
+                       style="text-align: center; font-size: 1.4rem; letter-spacing: 0.3em; font-weight: 800;"
+                       maxlength="6"
+                       @bind="_enteredPin" />
+
+                @if (!string.IsNullOrWhiteSpace(_pinError))
+                {
+                    <span style="color: #f87171; font-size: 0.82rem;">@_pinError</span>
+                }
+
+                <button class="btn btn-primary btn-block" @onclick="VerifyPin">
+                    Buka Pengaturan
+                </button>
+            </div>
+        }
+        else
+        {
+            <!-- Admin Control Settings -->
+            <div style="display: flex; flex-direction: column; gap: 16px; margin-top: 10px;">
+                <div class="form-group">
+                    <label class="form-label">Kunci Nomor Meja Default</label>
+                    <input type="text" 
+                           class="form-input" 
+                           style="font-weight: 700; text-transform: uppercase;"
+                           @bind="_kioskTableNumber" />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Tipe Default</label>
+                    <select class="form-select" @bind="_defaultOrderType">
+                        <option value="DineIn">Dine-In (Makan di Tempat)</option>
+                        <option value="Takeaway">Takeaway (Bungkus)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Mode Operasional</label>
+                    <div style="padding: 10px 14px; background: var(--bg-surface-elevated); border-radius: var(--radius-sm); font-size: 0.85rem; color: var(--color-success); font-weight: 600;">
+                        🟢 Mock API Engine (Development Mode: ON)
+                    </div>
+                </div>
+
+                <button class="btn btn-primary btn-block" @onclick="SaveSettings">
+                    Simpan Perubahan
+                </button>
+            </div>
+        }
+    </div>
+
+    <button class="btn btn-ghost btn-block" @onclick='() => Nav.NavigateTo("/menu")'>
+        Kembali ke Menu
+    </button>
+</div>
+
+@code {
+    private string _enteredPin = string.Empty;
+    private string? _pinError;
+    private bool _isAuthenticated = false;
+
+    private string _kioskTableNumber = "T-05";
+    private string _defaultOrderType = "DineIn";
+
+    protected override void OnInitialized()
+    {
+        if (Session.CurrentSession != null)
+        {
+            _kioskTableNumber = Session.CurrentSession.TableNumber;
+            _defaultOrderType = Session.CurrentSession.OrderType;
+        }
+    }
+
+    private void VerifyPin()
+    {
+        if (_enteredPin == "8888" || _enteredPin == "1234")
+        {
+            _isAuthenticated = true;
+            _pinError = null;
+        }
+        else
+        {
+            _pinError = "PIN salah. Silakan coba 8888.";
+        }
+    }
+
+    private void SaveSettings()
+    {
+        Session.SetSession(new DTOs.Session.TableSessionDto(
+            Session.CurrentSession?.SessionId ?? "sess_kiosk",
+            "jwt_kiosk",
+            _kioskTableNumber.ToUpper(),
+            _defaultOrderType,
+            "Kedai J.A",
+            DateTime.UtcNow.AddHours(12)
+        ));
+
+        Nav.NavigateTo("/menu");
+    }
+}

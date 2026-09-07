@@ -1,0 +1,50 @@
+@using PosSelfOrdering.Client.State
+@using PosSelfOrdering.Client.Extensions
+@inject CartState Cart
+@inject NavigationManager Nav
+@implements IDisposable
+
+@if (!Cart.IsEmpty)
+{
+    <div class="cart-floating-bar animate-fade-in" @onclick="GoToCart">
+        <div class="cart-info">
+            <div class="cart-icon-badge">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <circle cx="8" cy="21" r="1"/>
+                    <circle cx="19" cy="21" r="1"/>
+                    <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/>
+                </svg>
+                <span class="cart-count-pill">@Cart.TotalItemCount</span>
+            </div>
+
+            <div class="cart-total-text">
+                <span class="cart-total-label">Total Pesanan</span>
+                <span class="cart-total-amount">@Cart.GrandTotal.ToIdr()</span>
+            </div>
+        </div>
+
+        <button class="cart-checkout-btn">
+            <span>Lihat Keranjang</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path d="m9 18 6-6-6-6"/>
+            </svg>
+        </button>
+    </div>
+}
+
+@code {
+    protected override void OnInitialized()
+    {
+        Cart.OnChange += StateHasChanged;
+    }
+
+    private void GoToCart()
+    {
+        Nav.NavigateTo("/cart");
+    }
+
+    public void Dispose()
+    {
+        Cart.OnChange -= StateHasChanged;
+    }
+}

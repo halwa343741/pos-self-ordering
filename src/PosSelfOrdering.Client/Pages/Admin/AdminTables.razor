@@ -1,0 +1,414 @@
+@page "/admin/tables"
+@layout AdminLayout
+@inject IAdminService AdminService
+@inject SharedPosDataStore Store
+@inject BroadcastChannelService Broadcast
+@implements IDisposable
+
+<div class="tables-page-container">
+    <!-- HEADER & STATS -->
+    <div class="tables-header">
+        <div class="header-titles">
+            <h1 class="page-title">Monitor Meja Restoran</h1>
+            <p class="page-subtitle">Pantau keterisian meja 1 s/d 20 dan cetak stiker barcode QR pelanggan</p>
+        </div>
+
+        <div class="table-stats-bar">
+            <div class="tbl-stat-card total">
+                <span class="stat-num">@tables.Count</span>
+                <span class="stat-lbl">Total Meja</span>
+            </div>
+            <div class="tbl-stat-card available">
+                <span class="stat-num">@tables.Count(t => t.Status == "Available")</span>
+                <span class="stat-lbl">🟢 Kosong</span>
+            </div>
+            <div class="tbl-stat-card occupied">
+                <span class="stat-num">@tables.Count(t => t.Status == "Occupied")</span>
+                <span class="stat-lbl">🔴 Terisi</span>
+            </div>
+            <div class="tbl-stat-card billing">
+                <span class="stat-num">@tables.Count(t => t.Status == "Billing")</span>
+                <span class="stat-lbl">🟡 Kasir</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- FILTER BAR -->
+    <div class="tables-filter-bar">
+        <div class="filter-pills">
+            <button type="button" class="pill-btn @(selectedFilter == "all" ? "active" : "")" @onclick="@(() => selectedFilter = "all")">
+                Semua Meja (@tables.Count)
+            </button>
+            <button type="button" class="pill-btn @(selectedFilter == "Available" ? "active" : "")" @onclick="@(() => selectedFilter = "Available")">
+                🟢 Kosong Saja (@tables.Count(t => t.Status == "Available"))
+            </button>
+            <button type="button" class="pill-btn @(selectedFilter == "Occupied" ? "active" : "")" @onclick="@(() => selectedFilter = "Occupied")">
+                🔴 Terisi (@tables.Count(t => t.Status == "Occupied"))
+            </button>
+            <button type="button" class="pill-btn @(selectedFilter == "Billing" ? "active" : "")" @onclick="@(() => selectedFilter = "Billing")">
+                🟡 Menunggu Kasir (@tables.Count(t => t.Status == "Billing"))
+            </button>
+        </div>
+    </div>
+
+    <!-- TABLES GRID -->
+    <div class="tables-grid">
+        @foreach (var table in filteredTables)
+        {
+            <div class="table-card @GetTableClass(table.Status)">
+                <div class="tbl-card-header">
+                    <span class="tbl-name">@table.TableNumber</span>
+                    <span class="tbl-status-badge @table.Status.ToLowerInvariant()">
+                        @GetStatusText(table.Status)
+                    </span>
+                </div>
+
+                <div class="tbl-card-body">
+                    @if (table.Status is "Occupied" or "Billing")
+                    {
+                        <div class="active-order-info">
+                            <span class="info-label">Pesanan Aktif:</span>
+                            <span class="order-id">#@GetShortOrderNumber(table.ActiveOrderNumber)</span>
+                            @if (table.ActiveItemCount.HasValue)
+                            {
+                                <span class="item-count">(@table.ActiveItemCount items)</span>
+                            }
+                            @if (table.OccupiedSinceUtc.HasValue)
+                            {
+                                <div class="occupied-timer">
+                                    <span>⏱️ @GetOccupiedDuration(table.OccupiedSinceUtc.Value)</span>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="available-info">
+                            <span class="ready-icon">✓</span>
+                            <span>Meja Bersih & Siap</span>
+                        </div>
+                    }
+                </div>
+
+                <div class="tbl-card-footer">
+                    <button type="button" class="tbl-btn qr-btn" @onclick="@(() => OpenQrModal(table))" title="Cetak Stiker QR">
+                        <span>📱 QR Code</span>
+                    </button>
+                    @if (table.Status is "Occupied" or "Billing")
+                    {
+                        <button type="button" class="tbl-btn clear-btn" @onclick="@(() => HandleClearTable(table.TableNumber))" title="Kosongkan Meja">
+                            <span>🧹 Kosongkan</span>
+                        </button>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+<!-- QR MODAL -->
+<TableQrModal IsOpen="isQrModalOpen"
+              Table="selectedTableForQr"
+              OnClose="@(() => isQrModalOpen = false)" />
+
+<style>
+.tables-page-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.tables-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.table-stats-bar {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.tbl-stat-card {
+    background: rgba(17, 24, 39, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 14px;
+    padding: 10px 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 90px;
+}
+
+.tbl-stat-card .stat-num {
+    font-size: 1.3rem;
+    font-weight: 900;
+}
+
+.tbl-stat-card .stat-lbl {
+    font-size: 0.72rem;
+    color: #9ca3af;
+    font-weight: 700;
+}
+
+.tbl-stat-card.total .stat-num { color: #f9fafb; }
+.tbl-stat-card.available .stat-num { color: #34d399; }
+.tbl-stat-card.occupied .stat-num { color: #f87171; }
+.tbl-stat-card.billing .stat-num { color: #fbbf24; }
+
+.tables-filter-bar {
+    display: flex;
+    background: rgba(17, 24, 39, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    padding: 6px;
+}
+
+/* TABLES GRID */
+.tables-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 16px;
+}
+
+.table-card {
+    background: rgba(26, 34, 52, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: all 0.2s ease;
+}
+
+.table-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.35);
+}
+
+.table-card.tbl-available {
+    border-top: 4px solid #10b981;
+}
+
+.table-card.tbl-occupied {
+    border-top: 4px solid #ef4444;
+}
+
+.table-card.tbl-billing {
+    border-top: 4px solid #f59e0b;
+}
+
+.tbl-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.tbl-name {
+    font-size: 1.2rem;
+    font-weight: 900;
+    color: #f8fafc;
+}
+
+.tbl-status-badge {
+    font-size: 0.68rem;
+    font-weight: 800;
+    padding: 3px 8px;
+    border-radius: 6px;
+    text-transform: uppercase;
+}
+
+.tbl-status-badge.available {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+}
+
+.tbl-status-badge.occupied {
+    background: rgba(239, 68, 68, 0.15);
+    color: #fca5a5;
+}
+
+.tbl-status-badge.billing {
+    background: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+}
+
+.tbl-card-body {
+    min-height: 56px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.available-info {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    color: #64748b;
+}
+
+.ready-icon {
+    color: #34d399;
+    font-weight: 800;
+}
+
+.active-order-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.info-label {
+    font-size: 0.68rem;
+    color: #94a3b8;
+}
+
+.order-id {
+    font-weight: 800;
+    font-size: 0.85rem;
+    color: #fbbf24;
+}
+
+.item-count {
+    font-size: 0.72rem;
+    color: #94a3b8;
+}
+
+.occupied-timer {
+    font-size: 0.72rem;
+    color: #cbd5e1;
+    margin-top: 4px;
+}
+
+.tbl-card-footer {
+    display: flex;
+    gap: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding-top: 10px;
+    margin-top: auto;
+}
+
+.tbl-btn {
+    flex: 1;
+    padding: 6px;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+}
+
+.qr-btn {
+    background: rgba(59, 130, 246, 0.15);
+    border-color: rgba(59, 130, 246, 0.3);
+    color: #93c5fd;
+}
+
+.qr-btn:hover {
+    background: rgba(59, 130, 246, 0.25);
+}
+
+.clear-btn {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #fca5a5;
+}
+
+.clear-btn:hover {
+    background: rgba(239, 68, 68, 0.25);
+}
+</style>
+
+@code {
+    private List<TableStatusDto> tables = new();
+    private string selectedFilter = "all";
+
+    private bool isQrModalOpen = false;
+    private TableStatusDto? selectedTableForQr;
+
+    private IEnumerable<TableStatusDto> filteredTables =>
+        selectedFilter == "all"
+            ? tables
+            : tables.Where(t => t.Status == selectedFilter);
+
+    protected override async Task OnInitializedAsync()
+    {
+        Store.OnTableStatusUpdated += OnTablesUpdated;
+        Broadcast.OnTableUpdated += OnTablesUpdated;
+
+        await ReloadTables();
+    }
+
+    private async Task ReloadTables()
+    {
+        tables = (await AdminService.GetTablesAsync()).ToList();
+        StateHasChanged();
+    }
+
+    private void OnTablesUpdated()
+    {
+        InvokeAsync(async () =>
+        {
+            await ReloadTables();
+        });
+    }
+
+    private string GetTableClass(string status) => status switch
+    {
+        "Available" => "tbl-available",
+        "Occupied" => "tbl-occupied",
+        "Billing" => "tbl-billing",
+        _ => ""
+    };
+
+    private string GetStatusText(string status) => status switch
+    {
+        "Available" => "🟢 Kosong",
+        "Occupied" => "🔴 Terisi",
+        "Billing" => "🟡 Kasir",
+        _ => status
+    };
+
+    private string GetShortOrderNumber(string? full)
+    {
+        if (string.IsNullOrWhiteSpace(full)) return "";
+        var parts = full.Split('-');
+        return parts.Length > 2 ? parts[^1] : full;
+    }
+
+    private string GetOccupiedDuration(DateTime since)
+    {
+        var diff = DateTime.UtcNow - since;
+        if (diff.TotalMinutes < 1) return "< 1 menit";
+        if (diff.TotalHours < 1) return $"{(int)diff.TotalMinutes} menit";
+        return $"{(int)diff.TotalHours} jam {(int)diff.Minutes} m";
+    }
+
+    private void OpenQrModal(TableStatusDto table)
+    {
+        selectedTableForQr = table;
+        isQrModalOpen = true;
+    }
+
+    private async Task HandleClearTable(string tableNumber)
+    {
+        await AdminService.ResetTableAsync(tableNumber);
+        await ReloadTables();
+    }
+
+    public void Dispose()
+    {
+        Store.OnTableStatusUpdated -= OnTablesUpdated;
+        Broadcast.OnTableUpdated -= OnTablesUpdated;
+    }
+}

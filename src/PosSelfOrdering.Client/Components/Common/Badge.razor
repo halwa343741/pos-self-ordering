@@ -1,0 +1,21 @@
+<span class="badge @BadgeClass">
+    @if (!string.IsNullOrWhiteSpace(Icon))
+    {
+        <span>@Icon</span>
+    }
+    @Text
+</span>
+
+@code {
+    [Parameter, EditorRequired] public string Text { get; set; } = string.Empty;
+    [Parameter] public string Variant { get; set; } = "primary"; // primary | success | danger | info
+    [Parameter] public string? Icon { get; set; }
+
+    private string BadgeClass => Variant switch
+    {
+        "success" => "badge-success",
+        "danger" => "badge-danger",
+        "info" => "badge-info",
+        _ => "badge-primary"
+    };
+}

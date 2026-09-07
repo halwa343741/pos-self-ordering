@@ -1,0 +1,10 @@
+@page "/not-found"
+@layout MainLayout
+@inject NavigationManager Nav
+
+<div class="glass-panel" style="max-width: 480px; margin: 40px auto; padding: 30px;">
+    <EmptyState Title="Halaman Tidak Ditemukan"
+                Description="Halaman yang Anda tuju tidak tersedia atau telah dipindahkan."
+                ActionText="Kembali ke Beranda"
+                OnAction='() => Nav.NavigateTo("/")' />
+</div>

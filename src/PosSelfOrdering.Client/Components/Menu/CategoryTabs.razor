@@ -1,0 +1,34 @@
+@using PosSelfOrdering.Client.DTOs.Menu
+
+<div class="category-tabs-container">
+    <div class="category-tabs">
+        <button type="button" 
+                class="category-tab @(string.IsNullOrEmpty(SelectedCategoryId) ? "active" : "")"
+                @onclick="() => SelectCategory(null)">
+            <span>🌟</span>
+            <span>Semua Menu</span>
+        </button>
+
+        @foreach (var cat in Categories)
+        {
+            <button type="button" 
+                    class="category-tab @(SelectedCategoryId == cat.Id ? "active" : "")"
+                    @onclick="() => SelectCategory(cat.Id)">
+                <span>@cat.IconUrl</span>
+                <span>@cat.Name</span>
+            </button>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<CategoryDto> Categories { get; set; } = Array.Empty<CategoryDto>();
+    [Parameter] public string? SelectedCategoryId { get; set; }
+    [Parameter] public EventCallback<string?> SelectedCategoryIdChanged { get; set; }
+
+    private async Task SelectCategory(string? id)
+    {
+        SelectedCategoryId = id;
+        await SelectedCategoryIdChanged.InvokeAsync(id);
+    }
+}

@@ -1,0 +1,194 @@
+@inherits LayoutComponentBase
+@inject NavigationManager Navigation
+@inject IAdminService AdminService
+@inject AdminState AdminState
+@inject SharedPosDataStore Store
+@inject BroadcastChannelService Broadcast
+@implements IDisposable
+
+<div class="admin-layout">
+    <!-- TOPBAR -->
+    <header class="admin-topbar">
+        <div class="topbar-left">
+            <button class="menu-toggle-btn" @onclick="ToggleSidebar" aria-label="Toggle Sidebar">
+                <span>☰</span>
+            </button>
+            <div class="brand-badge">
+                <span class="brand-icon">⚡</span>
+                <span class="brand-title">Kedai J.A</span>
+                <span class="backoffice-tag">BACKOFFICE</span>
+            </div>
+        </div>
+
+        <div class="topbar-center">
+            <div class="store-status-pill">
+                <span class="pulse-dot"></span>
+                <span class="status-text">STORE OPEN</span>
+            </div>
+            <a href="/admin/orders" class="active-orders-counter">
+                <span class="counter-icon">📋</span>
+                <span>Pesanan Aktif: <strong>@AdminState.ActiveOrdersCount</strong></span>
+            </a>
+        </div>
+
+        <div class="topbar-right">
+            @if (AdminState.IsAuthenticated)
+            {
+                <div class="user-chip">
+                    <div class="user-avatar">
+                        @(AdminState.IsManager ? "👑" : "👨‍🍳")
+                    </div>
+                    <div class="user-meta">
+                        <span class="user-name">@AdminState.CurrentUser?.FullName</span>
+                        <span class="user-role">@(AdminState.IsManager ? "Store Manager" : "Kasir & Dapur")</span>
+                    </div>
+                </div>
+                <button class="logout-btn" @onclick="HandleLogout" title="Keluar">
+                    <span>🚪</span>
+                    <span class="logout-text">Keluar</span>
+                </button>
+            }
+            else
+            {
+                <a href="/admin/login" class="login-link">Login PIN</a>
+            }
+        </div>
+    </header>
+
+    <div class="admin-main-wrapper">
+        <!-- SIDEBAR -->
+        <aside class="admin-sidebar @(isSidebarOpen ? "open" : "")">
+            <nav class="sidebar-nav">
+                <NavLink class="nav-item" href="admin/orders" Match="NavLinkMatch.Prefix" @onclick="CloseSidebarOnMobile">
+                    <span class="nav-icon">📋</span>
+                    <span class="nav-label">KDS & Pesanan</span>
+                    @if (AdminState.ActiveOrdersCount > 0)
+                    {
+                        <span class="nav-badge">@AdminState.ActiveOrdersCount</span>
+                    }
+                </NavLink>
+
+                <NavLink class="nav-item" href="admin/tables" Match="NavLinkMatch.Prefix" @onclick="CloseSidebarOnMobile">
+                    <span class="nav-icon">🪑</span>
+                    <span class="nav-label">Monitor Meja</span>
+                </NavLink>
+
+                @if (AdminState.IsManager)
+                {
+                    <NavLink class="nav-item" href="admin/menu" Match="NavLinkMatch.Prefix" @onclick="CloseSidebarOnMobile">
+                        <span class="nav-icon">🍔</span>
+                        <span class="nav-label">Kelola Menu</span>
+                    </NavLink>
+
+                    <NavLink class="nav-item" href="admin/reports" Match="NavLinkMatch.Prefix" @onclick="CloseSidebarOnMobile">
+                        <span class="nav-icon">📊</span>
+                        <span class="nav-label">Laporan & Omzet</span>
+                    </NavLink>
+
+                    <NavLink class="nav-item" href="admin/settings" Match="NavLinkMatch.Prefix" @onclick="CloseSidebarOnMobile">
+                        <span class="nav-icon">⚙️</span>
+                        <span class="nav-label">Pengaturan Toko</span>
+                    </NavLink>
+                }
+                else
+                {
+                    <div class="manager-locked-section">
+                        <div class="locked-title">Fitur Manager (PIN 8888)</div>
+                        <div class="locked-item disabled">🍔 Kelola Menu</div>
+                        <div class="locked-item disabled">📊 Laporan & Omzet</div>
+                        <div class="locked-item disabled">⚙️ Pengaturan Toko</div>
+                    </div>
+                }
+
+                <div class="sidebar-divider"></div>
+
+                <a href="/" class="nav-item customer-pos-link" target="_blank">
+                    <span class="nav-icon">📱</span>
+                    <span class="nav-label">Buka Tab Pelanggan</span>
+                </a>
+            </nav>
+        </aside>
+
+        @if (isSidebarOpen)
+        {
+            <div class="sidebar-backdrop" @onclick="ToggleSidebar"></div>
+        }
+
+        <!-- CONTENT BODY -->
+        <main class="admin-content">
+            @Body
+        </main>
+    </div>
+</div>
+
+@code {
+    private bool isSidebarOpen = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        AdminState.OnStateChanged += StateHasChanged;
+        Store.OnOrderCreated += OnOrderCreatedHandler;
+        Store.OnOrderStatusUpdated += OnOrderStatusUpdatedHandler;
+
+        // Auto-authenticate default manager in mock development if not already authenticated
+        if (!AdminState.IsAuthenticated)
+        {
+            var uri = Navigation.Uri.ToLowerInvariant();
+            if (!uri.Contains("/admin/login"))
+            {
+                // Auto login as Manager for easy testing or redirect to login
+                await AdminService.LoginWithPinAsync("8888");
+            }
+        }
+
+        UpdateOrderCount();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await Broadcast.EnsureInitializedAsync();
+        }
+    }
+
+    private void ToggleSidebar() => isSidebarOpen = !isSidebarOpen;
+    private void CloseSidebarOnMobile() => isSidebarOpen = false;
+
+    private void OnOrderCreatedHandler(AdminOrderDto order)
+    {
+        InvokeAsync(() =>
+        {
+            UpdateOrderCount();
+            StateHasChanged();
+        });
+    }
+
+    private void OnOrderStatusUpdatedHandler(string orderNum, string status)
+    {
+        InvokeAsync(() =>
+        {
+            UpdateOrderCount();
+            StateHasChanged();
+        });
+    }
+
+    private void UpdateOrderCount()
+    {
+        var count = Store.Orders.Values.Count(o => o.Status is "PendingPayment" or "Cooking" or "Ready");
+        AdminState.SetActiveOrdersCount(count);
+    }
+
+    private void HandleLogout()
+    {
+        AdminService.Logout();
+        Navigation.NavigateTo("/admin/login");
+    }
+
+    public void Dispose()
+    {
+        AdminState.OnStateChanged -= StateHasChanged;
+        Store.OnOrderCreated -= OnOrderCreatedHandler;
+        Store.OnOrderStatusUpdated -= OnOrderStatusUpdatedHandler;
+    }
+}

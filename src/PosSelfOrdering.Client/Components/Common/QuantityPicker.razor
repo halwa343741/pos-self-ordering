@@ -1,0 +1,34 @@
+<div class="qty-picker">
+    <button type="button" class="qty-btn" @onclick="Decrement" disabled="@(Value <= MinValue)" aria-label="Kurangi jumlah">
+        -
+    </button>
+    <span class="qty-value">@Value</span>
+    <button type="button" class="qty-btn" @onclick="Increment" disabled="@(Value >= MaxValue)" aria-label="Tambah jumlah">
+        +
+    </button>
+</div>
+
+@code {
+    [Parameter] public int Value { get; set; } = 1;
+    [Parameter] public int MinValue { get; set; } = 1;
+    [Parameter] public int MaxValue { get; set; } = 99;
+    [Parameter] public EventCallback<int> ValueChanged { get; set; }
+
+    private async Task Decrement()
+    {
+        if (Value > MinValue)
+        {
+            Value--;
+            await ValueChanged.InvokeAsync(Value);
+        }
+    }
+
+    private async Task Increment()
+    {
+        if (Value < MaxValue)
+        {
+            Value++;
+            await ValueChanged.InvokeAsync(Value);
+        }
+    }
+}

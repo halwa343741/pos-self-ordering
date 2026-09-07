@@ -1,0 +1,500 @@
+@page "/admin/orders"
+@layout AdminLayout
+@inject IAdminService AdminService
+@inject SharedPosDataStore Store
+@inject BroadcastChannelService Broadcast
+@inject IJSRuntime JS
+@implements IDisposable
+
+<div class="kds-page-container">
+    <!-- HEADER CONTROLS -->
+    <div class="kds-header">
+        <div class="kds-header-title">
+            <h1 class="kds-title">Kitchen Display System (KDS)</h1>
+            <p class="kds-subtitle">Kelola alur dapur dan kasir secara real-time</p>
+        </div>
+
+        <div class="kds-controls">
+            <!-- Filter by Type -->
+            <div class="filter-pills">
+                <button type="button" class="pill-btn @(selectedTypeFilter == null ? "active" : "")" @onclick="@(() => SetTypeFilter(null))">
+                    Semua (@allOrders.Count(o => o.Status != "Cancelled"))
+                </button>
+                <button type="button" class="pill-btn @(selectedTypeFilter == "DineIn" ? "active" : "")" @onclick="@(() => SetTypeFilter("DineIn"))">
+                    🪑 Dine-In (@allOrders.Count(o => o.OrderType == "DineIn" && o.Status != "Cancelled"))
+                </button>
+                <button type="button" class="pill-btn @(selectedTypeFilter == "Takeaway" ? "active" : "")" @onclick="@(() => SetTypeFilter("Takeaway"))">
+                    🛍️ Takeaway (@allOrders.Count(o => o.OrderType == "Takeaway" && o.Status != "Cancelled"))
+                </button>
+            </div>
+
+            <!-- Sound toggle button -->
+            <button type="button" class="sound-toggle-btn @(isSoundEnabled ? "sound-on" : "sound-off")" @onclick="ToggleSound" title="Toggle Suara Notifikasi">
+                <span>@(isSoundEnabled ? "🔔 Suara Aktif" : "🔕 Suara Senyap")</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- 4-COLUMN KANBAN BOARD -->
+    <div class="kanban-board-container">
+        <!-- COLUMN 1: PENDING PAYMENT -->
+        <div class="kanban-column col-pending">
+            <div class="column-header">
+                <div class="col-title-badge">
+                    <span class="col-dot dot-yellow"></span>
+                    <span class="col-title">1. Menunggu Kasir</span>
+                </div>
+                <span class="col-counter">@pendingOrders.Count</span>
+            </div>
+            <div class="column-cards-list">
+                @if (!pendingOrders.Any())
+                {
+                    <div class="empty-column-state">
+                        <span class="empty-icon">✓</span>
+                        <span>Tidak ada pesanan menunggu bayar</span>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var order in pendingOrders)
+                    {
+                        <OrderKanbanCard Order="order"
+                                         OnAdvance="HandleAdvanceStatus"
+                                         OnVoid="OpenVoidModal" />
+                    }
+                }
+            </div>
+        </div>
+
+        <!-- COLUMN 2: COOKING -->
+        <div class="kanban-column col-cooking">
+            <div class="column-header">
+                <div class="col-title-badge">
+                    <span class="col-dot dot-blue"></span>
+                    <span class="col-title">2. Sedang Dimasak</span>
+                </div>
+                <span class="col-counter">@cookingOrders.Count</span>
+            </div>
+            <div class="column-cards-list">
+                @if (!cookingOrders.Any())
+                {
+                    <div class="empty-column-state">
+                        <span class="empty-icon">🍳</span>
+                        <span>Dapur bersih! Siap memasak</span>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var order in cookingOrders)
+                    {
+                        <OrderKanbanCard Order="order"
+                                         OnAdvance="HandleAdvanceStatus"
+                                         OnVoid="OpenVoidModal" />
+                    }
+                }
+            </div>
+        </div>
+
+        <!-- COLUMN 3: READY -->
+        <div class="kanban-column col-ready">
+            <div class="column-header">
+                <div class="col-title-badge">
+                    <span class="col-dot dot-green"></span>
+                    <span class="col-title">3. Siap Diambil / Diantar</span>
+                </div>
+                <span class="col-counter">@readyOrders.Count</span>
+            </div>
+            <div class="column-cards-list">
+                @if (!readyOrders.Any())
+                {
+                    <div class="empty-column-state">
+                        <span class="empty-icon">🔔</span>
+                        <span>Tidak ada pesanan menunggu diambil</span>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var order in readyOrders)
+                    {
+                        <OrderKanbanCard Order="order"
+                                         OnAdvance="HandleAdvanceStatus"
+                                         OnVoid="OpenVoidModal" />
+                    }
+                }
+            </div>
+        </div>
+
+        <!-- COLUMN 4: COMPLETED -->
+        <div class="kanban-column col-completed">
+            <div class="column-header">
+                <div class="col-title-badge">
+                    <span class="col-dot dot-gray"></span>
+                    <span class="col-title">4. Riwayat Selesai</span>
+                </div>
+                <span class="col-counter">@completedOrders.Count</span>
+            </div>
+            <div class="column-cards-list">
+                @if (!completedOrders.Any())
+                {
+                    <div class="empty-column-state">
+                        <span class="empty-icon">📜</span>
+                        <span>Belum ada riwayat pesanan selesai</span>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var order in completedOrders.Take(10))
+                    {
+                        <OrderKanbanCard Order="order"
+                                         OnPrintReceipt="OpenReceiptModal" />
+                    }
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODALS -->
+<VoidOrderModal IsOpen="isVoidModalOpen"
+                Order="selectedOrderForVoid"
+                OnClose="@(() => isVoidModalOpen = false)"
+                OnConfirm="HandleConfirmVoid" />
+
+<ReceiptModal IsOpen="isReceiptModalOpen"
+              Order="selectedOrderForReceipt"
+              OnClose="@(() => isReceiptModalOpen = false)" />
+
+<style>
+.kds-page-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    gap: 16px;
+}
+
+.kds-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.kds-title {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: #f9fafb;
+    margin: 0;
+}
+
+.kds-subtitle {
+    font-size: 0.82rem;
+    color: #9ca3af;
+    margin: 2px 0 0 0;
+}
+
+.kds-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.filter-pills {
+    display: flex;
+    background: rgba(17, 24, 39, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 4px;
+    gap: 4px;
+}
+
+.pill-btn {
+    background: transparent;
+    border: none;
+    color: #9ca3af;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.pill-btn:hover {
+    color: #f3f4f6;
+}
+
+.pill-btn.active {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.sound-toggle-btn {
+    padding: 8px 14px;
+    border-radius: 10px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.2s;
+}
+
+.sound-toggle-btn.sound-on {
+    background: rgba(16, 185, 129, 0.15);
+    border-color: rgba(16, 185, 129, 0.3);
+    color: #34d399;
+}
+
+.sound-toggle-btn.sound-off {
+    background: rgba(107, 114, 128, 0.2);
+    border-color: rgba(107, 114, 128, 0.3);
+    color: #9ca3af;
+}
+
+/* KANBAN BOARD */
+.kanban-board-container {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    flex: 1;
+    overflow-x: auto;
+    min-height: 500px;
+    padding-bottom: 8px;
+}
+
+.kanban-column {
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 18px;
+    display: flex;
+    flex-direction: column;
+    min-width: 290px;
+    max-height: calc(100vh - 170px);
+    overflow: hidden;
+}
+
+.column-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    background: rgba(30, 41, 59, 0.6);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.col-title-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.col-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.dot-yellow { background: #f59e0b; box-shadow: 0 0 6px #f59e0b; }
+.dot-blue { background: #3b82f6; box-shadow: 0 0 6px #3b82f6; }
+.dot-green { background: #10b981; box-shadow: 0 0 6px #10b981; }
+.dot-gray { background: #9ca3af; }
+
+.col-title {
+    font-size: 0.88rem;
+    font-weight: 800;
+    color: #f1f5f9;
+}
+
+.col-counter {
+    background: rgba(255, 255, 255, 0.1);
+    color: #cbd5e1;
+    font-size: 0.75rem;
+    font-weight: 800;
+    padding: 2px 8px;
+    border-radius: 12px;
+}
+
+.column-cards-list {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.empty-column-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 40px 16px;
+    color: #64748b;
+    font-size: 0.82rem;
+    text-align: center;
+}
+
+.empty-icon {
+    font-size: 1.6rem;
+    opacity: 0.5;
+}
+
+/* RESPONSIVE */
+@@media (max-width: 1200px) {
+    .kanban-board-container {
+        grid-template-columns: repeat(4, 300px);
+    }
+}
+</style>
+
+@code {
+    private List<AdminOrderDto> allOrders = new();
+    private string? selectedTypeFilter = null;
+    private bool isSoundEnabled = true;
+
+    // Modals state
+    private bool isVoidModalOpen = false;
+    private AdminOrderDto? selectedOrderForVoid;
+
+    private bool isReceiptModalOpen = false;
+    private AdminOrderDto? selectedOrderForReceipt;
+
+    private IEnumerable<AdminOrderDto> FilteredOrders =>
+        string.IsNullOrEmpty(selectedTypeFilter)
+            ? allOrders
+            : allOrders.Where(o => o.OrderType == selectedTypeFilter);
+
+    private List<AdminOrderDto> pendingOrders =>
+        FilteredOrders.Where(o => o.Status == "PendingPayment")
+                      .OrderBy(o => o.CreatedAtUtc)
+                      .ToList();
+
+    private List<AdminOrderDto> cookingOrders =>
+        FilteredOrders.Where(o => o.Status == "Cooking")
+                      .OrderBy(o => o.CreatedAtUtc)
+                      .ToList();
+
+    private List<AdminOrderDto> readyOrders =>
+        FilteredOrders.Where(o => o.Status == "Ready")
+                      .OrderBy(o => o.CreatedAtUtc)
+                      .ToList();
+
+    private List<AdminOrderDto> completedOrders =>
+        FilteredOrders.Where(o => o.Status == "Completed")
+                      .OrderByDescending(o => o.CreatedAtUtc)
+                      .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        Store.OnOrderCreated += OnNewOrderReceived;
+        Store.OnOrderStatusUpdated += OnOrderStatusUpdated;
+        Broadcast.OnOrderCreated += OnBroadcastOrderCreated;
+        Broadcast.OnOrderStatusUpdated += OnBroadcastOrderStatusUpdated;
+
+        await ReloadOrders();
+    }
+
+    private async Task ReloadOrders()
+    {
+        var orders = await AdminService.GetActiveOrdersAsync();
+        allOrders = orders.ToList();
+        StateHasChanged();
+    }
+
+    private void SetTypeFilter(string? type)
+    {
+        selectedTypeFilter = type;
+    }
+
+    private void ToggleSound()
+    {
+        isSoundEnabled = !isSoundEnabled;
+    }
+
+    private async Task PlayChime()
+    {
+        if (isSoundEnabled)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("audioHelper.playAlert");
+            }
+            catch
+            {
+                // Ignored if audio isn't initialized yet
+            }
+        }
+    }
+
+    private void OnNewOrderReceived(AdminOrderDto order)
+    {
+        InvokeAsync(async () =>
+        {
+            await ReloadOrders();
+            await PlayChime();
+        });
+    }
+
+    private void OnOrderStatusUpdated(string orderNum, string status)
+    {
+        InvokeAsync(async () =>
+        {
+            await ReloadOrders();
+        });
+    }
+
+    private void OnBroadcastOrderCreated(string orderNum)
+    {
+        InvokeAsync(async () =>
+        {
+            await ReloadOrders();
+            await PlayChime();
+        });
+    }
+
+    private void OnBroadcastOrderStatusUpdated(string orderNum, string status)
+    {
+        InvokeAsync(async () =>
+        {
+            await ReloadOrders();
+        });
+    }
+
+    private async Task HandleAdvanceStatus(AdminOrderDto order)
+    {
+        await AdminService.AdvanceOrderStatusAsync(order.OrderNumber, order.Status);
+        await ReloadOrders();
+    }
+
+    private void OpenVoidModal(AdminOrderDto order)
+    {
+        selectedOrderForVoid = order;
+        isVoidModalOpen = true;
+    }
+
+    private async Task HandleConfirmVoid(string reason)
+    {
+        if (selectedOrderForVoid != null)
+        {
+            await AdminService.CancelOrderAsync(selectedOrderForVoid.OrderNumber, reason);
+            await ReloadOrders();
+        }
+    }
+
+    private void OpenReceiptModal(AdminOrderDto order)
+    {
+        selectedOrderForReceipt = order;
+        isReceiptModalOpen = true;
+    }
+
+    public void Dispose()
+    {
+        Store.OnOrderCreated -= OnNewOrderReceived;
+        Store.OnOrderStatusUpdated -= OnOrderStatusUpdated;
+        Broadcast.OnOrderCreated -= OnBroadcastOrderCreated;
+        Broadcast.OnOrderStatusUpdated -= OnBroadcastOrderStatusUpdated;
+    }
+}

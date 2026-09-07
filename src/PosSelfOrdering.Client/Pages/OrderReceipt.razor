@@ -1,0 +1,93 @@
+@page "/receipt/{OrderNumber}"
+@using PosSelfOrdering.Client.Services
+@using PosSelfOrdering.Client.DTOs.Order
+@using PosSelfOrdering.Client.Extensions
+@inject IOrderService OrderService
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<div class="animate-fade-in" style="max-width: 480px; margin: 20px auto; display: flex; flex-direction: column; gap: 20px;">
+    <!-- Receipt Card (Paper Style) -->
+    <div class="glass-panel" style="padding: 28px; background: #182234; border: 1px dashed var(--border-medium); display: flex; flex-direction: column; gap: 16px; position: relative;">
+        <div style="text-align: center; border-bottom: 1px dashed var(--border-subtle); padding-bottom: 14px;">
+            <div style="height: 48px; margin-bottom: 6px; display: flex; justify-content: center;">
+                <img src="images/logo-kedai-ja.svg" alt="Kedai J.A" style="height: 48px; width: auto;" />
+            </div>
+            <h3 style="margin: 0; font-size: 1.25rem;">KEDAI J.A</h3>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin: 2px 0 0 0;">Kuliner & Kopi Istimewa</p>
+            <p style="font-size: 0.75rem; color: var(--text-muted); margin: 0;">Telp: (021) 555-8910</p>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; font-size: 0.82rem; color: var(--text-secondary);">
+            <span>No: <strong>@OrderNumber</strong></span>
+            <span>@DateTime.Now.ToString("dd/MM/yyyy HH:mm")</span>
+        </div>
+
+        <div style="height: 1px; background: var(--border-subtle);"></div>
+
+        <!-- Receipt Line Items -->
+        <div style="display: flex; flex-direction: column; gap: 10px; font-size: 0.88rem;">
+            <div style="display: flex; justify-content: space-between;">
+                <div>
+                    <span style="font-weight: 700; color: var(--text-primary);">2x Kopi Susu Gula Aren</span>
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">Regular, Less Ice, Grass Jelly</div>
+                </div>
+                <span style="font-weight: 700; color: var(--text-primary);">@((58000m).ToIdr())</span>
+            </div>
+        </div>
+
+        <div style="height: 1px; border-bottom: 1px dashed var(--border-subtle); margin: 4px 0;"></div>
+
+        <!-- Receipt Totals -->
+        <div style="display: flex; flex-direction: column; gap: 6px; font-size: 0.85rem; color: var(--text-secondary);">
+            <div style="display: flex; justify-content: space-between;">
+                <span>Subtotal</span>
+                <span>@((58000m).ToIdr())</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+                <span>PB1 Restoran (10%)</span>
+                <span>@((5800m).ToIdr())</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+                <span>Service Charge (5%)</span>
+                <span>@((2900m).ToIdr())</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-weight: 800; font-size: 1.1rem; color: var(--color-primary); margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border-subtle);">
+                <span>TOTAL LUNAS</span>
+                <span>@((66700m).ToIdr())</span>
+            </div>
+        </div>
+
+        <div style="text-align: center; border-top: 1px dashed var(--border-subtle); padding-top: 14px; font-size: 0.8rem; color: var(--text-muted);">
+            <p style="margin: 0; font-weight: 600;">Metode: QRIS Dinamis</p>
+            <p style="margin: 4px 0 0 0;">Terima kasih atas kunjungan Anda!</p>
+            <p style="margin: 2px 0 0 0; font-size: 0.72rem;">Struk ini sah sebagai bukti pembayaran digital resmi.</p>
+        </div>
+    </div>
+
+    <!-- Print & Back Actions -->
+    <div style="display: flex; gap: 12px;">
+        <button class="btn btn-secondary" style="flex: 1;" @onclick="PrintReceipt">
+            🖨️ Cetak Struk
+        </button>
+        <button class="btn btn-primary" style="flex: 1;" @onclick='() => Nav.NavigateTo("/menu")'>
+            Kembali ke Menu
+        </button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string OrderNumber { get; set; } = string.Empty;
+
+    private async Task PrintReceipt()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("window.print");
+        }
+        catch
+        {
+            // Ignore print dialog cancel
+        }
+    }
+}

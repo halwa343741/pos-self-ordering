@@ -1,0 +1,223 @@
+@page "/checkout"
+@using PosSelfOrdering.Client.State
+@using PosSelfOrdering.Client.Services
+@using PosSelfOrdering.Client.Extensions
+@using PosSelfOrdering.Client.Components.Common
+@using PosSelfOrdering.Client.Components.Cart
+@using PosSelfOrdering.Client.Components.Checkout
+@inject ICartService CartService
+@inject IOrderService OrderService
+@inject CartState Cart
+@inject SessionState Session
+@inject NavigationManager Nav
+
+<div class="animate-fade-in" style="max-width: 600px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px;">
+    <!-- Header -->
+    <div style="border-bottom: 1px solid var(--border-subtle); padding-bottom: 12px;">
+        <h2>Konfirmasi & Pembayaran</h2>
+        <p style="font-size: 0.85rem; margin: 0;">Pilih metode pembayaran dan konfirmasi pesanan Anda.</p>
+    </div>
+
+    @if (Cart.IsEmpty)
+    {
+        <div class="glass-panel" style="padding: 30px;">
+            <EmptyState Title="Keranjang Kosong"
+                        Description="Silakan pilih menu terlebih dahulu sebelum melakukan checkout."
+                        ActionText="Kembali ke Menu"
+                        OnAction='() => Nav.NavigateTo("/menu")' />
+        </div>
+    }
+    else
+    {
+        <!-- Table & Order Type Info Box -->
+        <div class="glass-panel" style="padding: 16px; display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="font-size: 1.5rem;">📍</div>
+                <div>
+                    <h4 style="margin: 0; font-size: 0.95rem;">@(Session.CurrentSession?.OrderType == "Takeaway" ? "Takeaway (Bungkus)" : $"Dine-In (Meja {Session.CurrentSession?.TableNumber})")</h4>
+                    <span style="font-size: 0.8rem; color: var(--text-secondary);">@(Session.CurrentSession?.StoreName ?? "Kopi Nusantara")</span>
+                </div>
+            </div>
+            <button class="btn btn-ghost btn-sm" @onclick="OpenChangeTableModal">
+                ✏️ Ubah Meja
+            </button>
+        </div>
+
+        <!-- Payment Method Selection -->
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+            <label class="form-label" style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary);">
+                Pilih Metode Pembayaran
+            </label>
+
+            <PaymentMethodCard Title="QRIS (Semua E-Wallet & Mobile Banking)"
+                               Subtitle="BCA, Mandiri, GoPay, OVO, ShopeePay, DANA"
+                               Icon="📱"
+                               IsSelected='@(_selectedPayment == "QRIS")'
+                               OnSelect='() => _selectedPayment = "QRIS"' />
+
+            <PaymentMethodCard Title="GoPay Instant"
+                               Subtitle="Buka aplikasi GoPay langsung"
+                               Icon="🟢"
+                               IsSelected='@(_selectedPayment == "GoPay")'
+                               OnSelect='() => _selectedPayment = "GoPay"' />
+
+            <PaymentMethodCard Title="ShopeePay"
+                               Subtitle="Bayar cepat dengan ShopeePay"
+                               Icon="🟠"
+                               IsSelected='@(_selectedPayment == "ShopeePay")'
+                               OnSelect='() => _selectedPayment = "ShopeePay"' />
+
+            <PaymentMethodCard Title="Bayar di Kasir (Cash / EDC)"
+                               Subtitle="Lakukan pembayaran tunai atau kartu di kasir"
+                               Icon="💵"
+                               IsSelected='@(_selectedPayment == "Cashier")'
+                               OnSelect='() => _selectedPayment = "Cashier"' />
+        </div>
+
+        <!-- Special Notes for Kitchen -->
+        <div class="form-group">
+            <label class="form-label">Catatan Untuk Dapur / Barista (Opsional)</label>
+            <textarea class="form-textarea" 
+                      rows="2" 
+                      placeholder="Contoh: Pesanan disajikan bersamaan..."
+                      @bind="_kitchenNotes"></textarea>
+        </div>
+
+        <!-- Price Summary -->
+        <PriceBreakdown Subtotal="@Cart.Subtotal"
+                        Discount="0"
+                        Tax="@Cart.Tax"
+                        ServiceCharge="@Cart.ServiceCharge"
+                        GrandTotal="@Cart.GrandTotal" />
+
+        @if (!string.IsNullOrWhiteSpace(_errorMessage))
+        {
+            <div style="background: var(--color-danger-bg); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; padding: 10px 14px; border-radius: var(--radius-sm); font-size: 0.88rem;">
+                @_errorMessage
+            </div>
+        }
+
+        <!-- Submit Order CTA -->
+        <button class="btn btn-primary btn-block" 
+                style="padding: 14px; font-size: 1.1rem; font-weight: 800;" 
+                disabled="@_isSubmitting" 
+                @onclick="ProcessOrder">
+            @if (_isSubmitting)
+            {
+                <span>Memproses Pesanan...</span>
+            }
+            else
+            {
+                <span>Konfirmasi & Bayar Sekarang ➔</span>
+            }
+        </button>
+    }
+</div>
+
+<!-- Modal Ubah Nomor Meja di Halaman Checkout -->
+@if (_isTableModalOpen)
+{
+    <div class="modal-backdrop" @onclick="() => _isTableModalOpen = false">
+        <div class="modal-container" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h3 style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary);">Ubah Nomor Meja / Tipe</h3>
+                <button type="button" class="btn btn-ghost btn-icon" style="width: 32px; height: 32px;" @onclick="() => _isTableModalOpen = false">
+                    ✕
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Tipe Pemesanan</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <button type="button" 
+                                class="btn @(_tempOrderType == "DineIn" ? "btn-primary" : "btn-secondary")"
+                                @onclick='() => _tempOrderType = "DineIn"'>
+                            <span>🪑 Dine-In</span>
+                        </button>
+                        <button type="button" 
+                                class="btn @(_tempOrderType == "Takeaway" ? "btn-primary" : "btn-secondary")"
+                                @onclick='() => _tempOrderType = "Takeaway"'>
+                            <span>🛍️ Takeaway</span>
+                        </button>
+                    </div>
+                </div>
+
+                @if (_tempOrderType == "DineIn")
+                {
+                    <div class="form-group animate-fade-in">
+                        <label class="form-label">Nomor Meja Baru</label>
+                        <input type="text" 
+                               class="form-input" 
+                               style="font-size: 1.2rem; font-weight: 800; text-transform: uppercase;"
+                               placeholder="Contoh: T-05" 
+                               @bind="_tempTableNumber" />
+                    </div>
+                }
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost" @onclick="() => _isTableModalOpen = false">
+                    Batal
+                </button>
+                <button type="button" class="btn btn-primary" @onclick="SaveTableChange">
+                    Simpan Perubahan
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private string _selectedPayment = "QRIS";
+    private string _kitchenNotes = string.Empty;
+    private bool _isSubmitting = false;
+    private string? _errorMessage;
+
+    private bool _isTableModalOpen = false;
+    private string _tempOrderType = "DineIn";
+    private string _tempTableNumber = "T-05";
+
+    private void OpenChangeTableModal()
+    {
+        if (Session.CurrentSession != null)
+        {
+            _tempOrderType = Session.CurrentSession.OrderType;
+            _tempTableNumber = Session.CurrentSession.TableNumber;
+        }
+        _isTableModalOpen = true;
+    }
+
+    private void SaveTableChange()
+    {
+        Session.UpdateTable(_tempTableNumber, _tempOrderType);
+        _isTableModalOpen = false;
+    }
+
+    private async Task ProcessOrder()
+    {
+        _isSubmitting = true;
+        _errorMessage = null;
+
+        try
+        {
+            var response = await OrderService.SubmitOrderAsync(_selectedPayment, _kitchenNotes);
+            if (response.Success && response.Data is not null)
+            {
+                Nav.NavigateTo($"/order-status/{response.Data.OrderNumber}");
+            }
+            else
+            {
+                _errorMessage = response.Message ?? "Terjadi kesalahan saat memproses pesanan.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Gagal terhubung ke sistem: {ex.Message}";
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+}

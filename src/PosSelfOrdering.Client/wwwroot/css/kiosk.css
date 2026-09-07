@@ -1,0 +1,71 @@
+/* ==========================================================================
+   Tablet & Desktop Kiosk Layout Overrides
+   ========================================================================== */
+@media (min-width: 900px) {
+  .kiosk-layout {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .kiosk-main-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow-y: auto;
+    border-right: 1px solid var(--border-subtle);
+  }
+
+  .kiosk-cart-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    background: var(--bg-surface);
+    position: relative;
+    border-left: 1px solid var(--border-medium);
+  }
+
+  .kiosk-cart-header {
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-surface-elevated);
+  }
+
+  .kiosk-cart-items {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .kiosk-cart-footer {
+    padding: 18px 20px;
+    border-top: 1px solid var(--border-subtle);
+    background: var(--bg-surface-elevated);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  /* Only hide floating bar when inside split-screen Kiosk layout */
+  .kiosk-layout .cart-floating-bar {
+    display: none !important;
+  }
+
+  .menu-grid {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 20px;
+  }
+
+  /* On desktop standard layout, make floating cart bar slightly wider & elegant */
+  .cart-floating-bar {
+    max-width: 580px;
+    bottom: 24px;
+  }
+}

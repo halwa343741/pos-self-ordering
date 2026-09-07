@@ -1,0 +1,36 @@
+<div class="glass-panel @(IsSelected ? "selected" : "")" 
+     style="padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; border: 1.5px solid @(IsSelected ? "var(--color-primary)" : "var(--border-subtle)"); background: @(IsSelected ? "var(--color-primary-light)" : "var(--bg-surface)"); transition: all var(--transition-fast);"
+     @onclick="HandleSelect">
+    <div style="display: flex; align-items: center; gap: 14px;">
+        <div style="width: 42px; height: 42px; border-radius: var(--radius-sm); background: var(--bg-surface-elevated); display: flex; align-items: center; justify-content: center; font-size: 1.4rem;">
+            @Icon
+        </div>
+        <div>
+            <h4 style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary);">@Title</h4>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin: 0;">@Subtitle</p>
+        </div>
+    </div>
+
+    <div class="custom-radio" style="@(IsSelected ? "border-color: var(--color-primary); background: var(--color-primary);" : "")">
+        @if (IsSelected)
+        {
+            <div style="width: 8px; height: 8px; border-radius: 9999px; background: #000;"></div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter] public string Subtitle { get; set; } = string.Empty;
+    [Parameter] public string Icon { get; set; } = "💳";
+    [Parameter] public bool IsSelected { get; set; }
+    [Parameter] public EventCallback OnSelect { get; set; }
+
+    private async Task HandleSelect()
+    {
+        if (OnSelect.HasDelegate)
+        {
+            await OnSelect.InvokeAsync();
+        }
+    }
+}

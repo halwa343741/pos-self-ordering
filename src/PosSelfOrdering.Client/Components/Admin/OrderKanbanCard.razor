@@ -1,0 +1,479 @@
+@using PosSelfOrdering.Client.DTOs.Admin
+@using PosSelfOrdering.Client.Extensions
+@inject IJSRuntime JS
+@implements IDisposable
+
+<div class="kanban-card @GetCardStatusClass()">
+    <!-- CARD HEADER -->
+    <div class="card-header">
+        <div class="card-title-group">
+            <span class="order-type-badge @(Order.OrderType == "DineIn" ? "dine-in" : "takeaway")">
+                @(Order.OrderType == "DineIn" ? "🪑 Dine-In" : "🛍️ Takeaway")
+            </span>
+            <span class="table-pill">
+                @(string.IsNullOrWhiteSpace(Order.TableNumber) ? "Takeaway" : Order.TableNumber)
+            </span>
+        </div>
+        <div class="order-timer @GetTimerClass()">
+            <span class="timer-icon">⏱️</span>
+            <span class="timer-text">@elapsedDisplay</span>
+        </div>
+    </div>
+
+    <!-- ORDER META -->
+    <div class="order-meta-row">
+        <span class="order-num">#@GetShortOrderNumber(Order.OrderNumber)</span>
+        @if (!string.IsNullOrWhiteSpace(Order.CustomerName))
+        {
+            <span class="customer-name">👤 @Order.CustomerName</span>
+        }
+        <span class="payment-badge @(Order.IsPaid ? "paid" : "unpaid")">
+            @(Order.IsPaid ? "✓ Lunas" : "⏳ Belum Lunas") (@Order.PaymentMethod)
+        </span>
+    </div>
+
+    <!-- ITEMS LIST -->
+    <div class="card-items-list">
+        @if (Order.Items != null)
+        {
+            @foreach (var item in Order.Items)
+            {
+                <div class="card-item-row">
+                    <div class="item-qty-name">
+                        <span class="item-qty">@(item.Quantity)x</span>
+                        <span class="item-name">@item.Name</span>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(item.SelectedModifiersSummary) && item.SelectedModifiersSummary != "Standar")
+                    {
+                        <div class="item-modifiers">
+                            <span class="mod-icon">↳</span>
+                            <span>@item.SelectedModifiersSummary</span>
+                        </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(item.Notes))
+                    {
+                        <div class="item-notes">
+                            <span class="note-icon">📝</span>
+                            <span>"@item.Notes"</span>
+                        </div>
+                    }
+                </div>
+            }
+        }
+    </div>
+
+    <!-- CUSTOMER OVERALL NOTES -->
+    @if (!string.IsNullOrWhiteSpace(Order.CustomerNotes))
+    {
+        <div class="overall-notes">
+            <span class="notes-label">Catatan Pesanan:</span>
+            <span class="notes-content">@Order.CustomerNotes</span>
+        </div>
+    }
+
+    <!-- CARD FOOTER & ACTIONS -->
+    <div class="card-footer">
+        <div class="card-total">
+            <span class="total-label">Total:</span>
+            <span class="total-val">@Order.GrandTotal.ToIdr()</span>
+        </div>
+
+        <div class="card-actions">
+            @if (Order.Status == "PendingPayment")
+            {
+                <button type="button" class="btn-action void-btn" @onclick="@(() => OnVoid.InvokeAsync(Order))">
+                    Batalkan
+                </button>
+                <button type="button" class="btn-action confirm-btn" @onclick="@(() => OnAdvance.InvokeAsync(Order))">
+                    💵 Lunas (Masak)
+                </button>
+            }
+            else if (Order.Status == "Cooking")
+            {
+                <button type="button" class="btn-action ready-btn" @onclick="@(() => OnAdvance.InvokeAsync(Order))">
+                    🔔 Tandai Siap
+                </button>
+            }
+            else if (Order.Status == "Ready")
+            {
+                <button type="button" class="btn-action complete-btn" @onclick="@(() => OnAdvance.InvokeAsync(Order))">
+                    ✓ Selesai
+                </button>
+            }
+            else if (Order.Status == "Completed")
+            {
+                <button type="button" class="btn-action print-btn" @onclick="@(() => OnPrintReceipt.InvokeAsync(Order))">
+                    🖨️ Cetak Struk
+                </button>
+            }
+        </div>
+    </div>
+</div>
+
+<style>
+.kanban-card {
+    background: rgba(26, 34, 52, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    transition: transform 0.2s, box-shadow 0.2s;
+    animation: fadeInCard 0.3s ease;
+}
+
+@@keyframes fadeInCard {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.kanban-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.kanban-card.card-pending {
+    border-left: 4px solid #f59e0b;
+}
+
+.kanban-card.card-cooking {
+    border-left: 4px solid #3b82f6;
+}
+
+.kanban-card.card-ready {
+    border-left: 4px solid #10b981;
+}
+
+.kanban-card.card-completed {
+    border-left: 4px solid #6b7280;
+    opacity: 0.85;
+}
+
+.card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.card-title-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.order-type-badge {
+    font-size: 0.72rem;
+    font-weight: 800;
+    padding: 3px 8px;
+    border-radius: 6px;
+    text-transform: uppercase;
+}
+
+.order-type-badge.dine-in {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.order-type-badge.takeaway {
+    background: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.table-pill {
+    background: #1e293b;
+    color: #f8fafc;
+    font-size: 0.8rem;
+    font-weight: 800;
+    padding: 3px 10px;
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.order-timer {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.timer-green { color: #34d399; }
+.timer-yellow { color: #fbbf24; background: rgba(245, 158, 11, 0.15); }
+.timer-red { color: #f87171; background: rgba(239, 68, 68, 0.2); animation: pulseTimer 1.5s infinite; }
+
+@@keyframes pulseTimer {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+.order-meta-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    color: #94a3b8;
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+    padding-bottom: 8px;
+}
+
+.order-num {
+    font-weight: 700;
+    color: #cbd5e1;
+}
+
+.customer-name {
+    color: #f1f5f9;
+    font-weight: 600;
+}
+
+.payment-badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.payment-badge.paid {
+    color: #34d399;
+    background: rgba(16, 185, 129, 0.15);
+}
+
+.payment-badge.unpaid {
+    color: #f87171;
+    background: rgba(239, 68, 68, 0.15);
+}
+
+.card-items-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.card-item-row {
+    display: flex;
+    flex-direction: column;
+    background: rgba(15, 23, 42, 0.5);
+    padding: 6px 10px;
+    border-radius: 8px;
+}
+
+.item-qty-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.item-qty {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+    font-weight: 800;
+    font-size: 0.75rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.item-name {
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: #f8fafc;
+}
+
+.item-modifiers {
+    font-size: 0.74rem;
+    color: #94a3b8;
+    margin-top: 2px;
+    margin-left: 14px;
+}
+
+.item-notes {
+    font-size: 0.72rem;
+    color: #fcd34d;
+    font-style: italic;
+    margin-top: 2px;
+    margin-left: 14px;
+}
+
+.overall-notes {
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px dashed rgba(245, 158, 11, 0.3);
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 0.75rem;
+}
+
+.notes-label {
+    font-weight: 700;
+    color: #fbbf24;
+    display: block;
+    margin-bottom: 2px;
+}
+
+.notes-content {
+    color: #fef08a;
+}
+
+.card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding-top: 10px;
+    margin-top: auto;
+}
+
+.card-total {
+    display: flex;
+    flex-direction: column;
+}
+
+.total-label {
+    font-size: 0.68rem;
+    color: #94a3b8;
+}
+
+.total-val {
+    font-size: 0.88rem;
+    font-weight: 800;
+    color: #fbbf24;
+}
+
+.card-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-action {
+    padding: 7px 12px;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.btn-action:hover {
+    transform: translateY(-1px);
+}
+
+.btn-action:active {
+    transform: translateY(1px);
+}
+
+.confirm-btn {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: #fff;
+    box-shadow: 0 2px 10px rgba(16, 185, 129, 0.3);
+}
+
+.void-btn {
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #fca5a5;
+}
+
+.void-btn:hover {
+    background: rgba(239, 68, 68, 0.3);
+}
+
+.ready-btn {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: #000;
+    font-weight: 800;
+    box-shadow: 0 2px 10px rgba(245, 158, 11, 0.3);
+}
+
+.complete-btn {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    color: #fff;
+    box-shadow: 0 2px 10px rgba(59, 130, 246, 0.3);
+}
+
+.print-btn {
+    background: rgba(255, 255, 255, 0.1);
+    color: #f3f4f6;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.print-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+</style>
+
+@code {
+    [Parameter, EditorRequired] public AdminOrderDto Order { get; set; } = default!;
+    [Parameter] public EventCallback<AdminOrderDto> OnAdvance { get; set; }
+    [Parameter] public EventCallback<AdminOrderDto> OnVoid { get; set; }
+    [Parameter] public EventCallback<AdminOrderDto> OnPrintReceipt { get; set; }
+
+    private System.Threading.Timer? _timer;
+    private string elapsedDisplay = "0m";
+
+    protected override void OnInitialized()
+    {
+        UpdateElapsed();
+        _timer = new System.Threading.Timer(_ =>
+        {
+            InvokeAsync(() =>
+            {
+                UpdateElapsed();
+                StateHasChanged();
+            });
+        }, null, 1000, 15000);
+    }
+
+    private void UpdateElapsed()
+    {
+        var diff = DateTime.UtcNow - Order.CreatedAtUtc;
+        if (diff.TotalMinutes < 1)
+        {
+            elapsedDisplay = $"{Math.Max(0, (int)diff.TotalSeconds)}s";
+        }
+        else if (diff.TotalHours < 1)
+        {
+            elapsedDisplay = $"{(int)diff.TotalMinutes}m";
+        }
+        else
+        {
+            elapsedDisplay = $"{(int)diff.TotalHours}h {(int)diff.Minutes}m";
+        }
+    }
+
+    private string GetTimerClass()
+    {
+        var diff = DateTime.UtcNow - Order.CreatedAtUtc;
+        if (diff.TotalMinutes < 10) return "timer-green";
+        if (diff.TotalMinutes < 20) return "timer-yellow";
+        return "timer-red";
+    }
+
+    private string GetCardStatusClass() => Order.Status switch
+    {
+        "PendingPayment" => "card-pending",
+        "Cooking" => "card-cooking",
+        "Ready" => "card-ready",
+        "Completed" => "card-completed",
+        _ => ""
+    };
+
+    private string GetShortOrderNumber(string full)
+    {
+        var parts = full.Split('-');
+        return parts.Length > 2 ? parts[^1] : full;
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+    }
+}

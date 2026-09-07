@@ -1,0 +1,176 @@
+@page "/menu"
+@using PosSelfOrdering.Client.Services
+@using PosSelfOrdering.Client.DTOs.Menu
+@using PosSelfOrdering.Client.Components.Common
+@using PosSelfOrdering.Client.Components.Menu
+@using PosSelfOrdering.Client.Components.Cart
+@using PosSelfOrdering.Client.State
+@using PosSelfOrdering.Client.Store
+@inject IMenuService MenuService
+@inject ICartService CartService
+@inject SessionState Session
+@inject SharedPosDataStore Store
+@inject BroadcastChannelService Broadcast
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@implements IDisposable
+
+<div class="menu-page-wrap animate-fade-in">
+    <!-- Category Tabs Filter -->
+    <CategoryTabs Categories="_categories"
+                  SelectedCategoryId="@_selectedCategoryId"
+                  SelectedCategoryIdChanged="HandleCategoryChanged" />
+
+    <!-- Search Input -->
+    <SearchBar Value="@_searchQuery"
+               ValueChanged="HandleSearchChanged" />
+
+    <!-- Main Content Area with 5 States -->
+    @if (_isLoading)
+    {
+        <LoadingSkeleton Count="6" />
+    }
+    else if (_hasError)
+    {
+        <ErrorAlert Message="@_errorMessage" OnRetry="LoadDataAsync" />
+    }
+    else if (!_menuItems.Any())
+    {
+        <EmptyState Title="Menu Tidak Ditemukan"
+                    Description="Tidak ada makanan atau minuman yang cocok dengan pencarian Anda."
+                    ActionText="Lihat Semua Menu"
+                    OnAction="ResetFilters" />
+    }
+    else
+    {
+        <div class="menu-grid">
+            @foreach (var item in _menuItems)
+            {
+                <MenuItemCard Item="item" OnSelect="OpenItemDetail" />
+            }
+        </div>
+    }
+
+    <!-- Customization Modal -->
+    <ItemDetailModal IsOpen="@_isDetailOpen"
+                     Item="@_selectedItem"
+                     OnClose="CloseDetailModal"
+                     OnAddToCart="HandleAddToCart" />
+
+    <!-- Sticky Floating Cart Bar -->
+    <CartSummaryBar />
+</div>
+
+@code {
+    private IReadOnlyList<CategoryDto> _categories = Array.Empty<CategoryDto>();
+    private IReadOnlyList<MenuItemDto> _menuItems = Array.Empty<MenuItemDto>();
+
+    private string? _selectedCategoryId;
+    private string _searchQuery = string.Empty;
+
+    private bool _isLoading = true;
+    private bool _hasError = false;
+    private string _errorMessage = string.Empty;
+
+    private bool _isDetailOpen = false;
+    private MenuItemDto? _selectedItem;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.HasActiveSession)
+        {
+            // Auto-initialize default guest session if user jumped straight to /menu
+            Session.SetSession(new DTOs.Session.TableSessionDto("sess_demo", "jwt_demo", "T-05", "DineIn", "Kedai J.A", DateTime.UtcNow.AddHours(4)));
+        }
+
+        Store.OnMenuCatalogUpdated += OnStoreCatalogUpdated;
+        Broadcast.OnMenuUpdated += OnStoreCatalogUpdated;
+
+        await LoadDataAsync();
+    }
+
+    private void OnStoreCatalogUpdated()
+    {
+        InvokeAsync(async () =>
+        {
+            await LoadDataAsync();
+            StateHasChanged();
+        });
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _isLoading = true;
+        _hasError = false;
+
+        try
+        {
+            _categories = await MenuService.GetCategoriesAsync();
+            _menuItems = await MenuService.GetMenuItemsAsync(_selectedCategoryId, _searchQuery);
+        }
+        catch (Exception ex)
+        {
+            _hasError = true;
+            _errorMessage = $"Gagal memuat menu: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task HandleCategoryChanged(string? categoryId)
+    {
+        _selectedCategoryId = categoryId;
+        _isLoading = true;
+        _menuItems = await MenuService.GetMenuItemsAsync(_selectedCategoryId, _searchQuery);
+        _isLoading = false;
+    }
+
+    private async Task HandleSearchChanged(string query)
+    {
+        _searchQuery = query;
+        _isLoading = true;
+        _menuItems = await MenuService.GetMenuItemsAsync(_selectedCategoryId, _searchQuery);
+        _isLoading = false;
+    }
+
+    private async Task ResetFilters()
+    {
+        _selectedCategoryId = null;
+        _searchQuery = string.Empty;
+        await LoadDataAsync();
+    }
+
+    private void OpenItemDetail(MenuItemDto item)
+    {
+        _selectedItem = item;
+        _isDetailOpen = true;
+    }
+
+    private void CloseDetailModal()
+    {
+        _isDetailOpen = false;
+        _selectedItem = null;
+    }
+
+    private async Task HandleAddToCart((MenuItemDto Item, List<ModifierOptionDto> Options, int Quantity, string Notes) data)
+    {
+        CartService.AddItem(data.Item, data.Options, data.Quantity, data.Notes);
+
+        try
+        {
+            await JS.InvokeVoidAsync("pwaHelper.triggerVibrate", 50);
+        }
+        catch
+        {
+            // Ignore if JS Interop vibration not supported
+        }
+    }
+
+    public void Dispose()
+    {
+        Store.OnMenuCatalogUpdated -= OnStoreCatalogUpdated;
+        Broadcast.OnMenuUpdated -= OnStoreCatalogUpdated;
+    }
+}

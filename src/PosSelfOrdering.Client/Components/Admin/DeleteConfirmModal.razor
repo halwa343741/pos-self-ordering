@@ -1,0 +1,86 @@
+@if (IsOpen)
+{
+    <div class="modal-backdrop" @onclick="Close">
+        <div class="delete-modal-container glass-panel" @onclick:stopPropagation>
+            <div class="modal-header">
+                <div class="header-left">
+                    <span class="header-icon">🗑️</span>
+                    <h3>@Title</h3>
+                </div>
+                <button type="button" class="close-btn" @onclick="Close">✕</button>
+            </div>
+
+            <div class="modal-body">
+                <p class="confirm-message">@Message</p>
+                @if (!string.IsNullOrWhiteSpace(ItemName))
+                {
+                    <div class="item-highlight-box">
+                        <strong>@ItemName</strong>
+                    </div>
+                }
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn-cancel" @onclick="Close">Batal</button>
+                <button type="button" class="btn-confirm-delete" @onclick="Confirm">
+                    <span>Hapus Permanen</span>
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+.delete-modal-container {
+    background: #1e293b;
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    border-radius: 20px;
+    max-width: 420px;
+    width: 100%;
+    overflow: hidden;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
+}
+
+.confirm-message {
+    font-size: 0.9rem;
+    color: #cbd5e1;
+    margin-bottom: 12px;
+}
+
+.item-highlight-box {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px dashed rgba(239, 68, 68, 0.3);
+    padding: 10px 14px;
+    border-radius: 10px;
+    color: #fca5a5;
+    font-size: 0.95rem;
+}
+
+.btn-confirm-delete {
+    flex: 2;
+    padding: 10px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #ef4444, #b91c1c);
+    border: none;
+    color: #fff;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(239, 68, 68, 0.35);
+}
+</style>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public string Title { get; set; } = "Konfirmasi Hapus";
+    [Parameter] public string Message { get; set; } = "Apakah Anda yakin ingin menghapus item ini?";
+    [Parameter] public string? ItemName { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnConfirm { get; set; }
+
+    private async Task Close() => await OnClose.InvokeAsync();
+    private async Task Confirm()
+    {
+        await OnConfirm.InvokeAsync();
+        await Close();
+    }
+}

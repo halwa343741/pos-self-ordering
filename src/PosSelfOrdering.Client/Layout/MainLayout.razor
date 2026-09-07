@@ -1,0 +1,18 @@
+@inherits LayoutComponentBase
+@using PosSelfOrdering.Client.Components.Layout
+@using PosSelfOrdering.Client.Components.Common
+
+<div class="app-container">
+    <OfflineBadge />
+    <HeaderNav />
+
+    <main class="main-content animate-fade-in">
+        @Body
+    </main>
+
+    <div id="blazor-error-ui" data-nosnippet style="display:none;">
+        Terjadi kesalahan yang tidak terduga.
+        <a href="." class="reload">Muat Ulang</a>
+        <span class="dismiss">🗙</span>
+    </div>
+</div>

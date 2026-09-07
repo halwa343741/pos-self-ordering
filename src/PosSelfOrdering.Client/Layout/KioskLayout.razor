@@ -1,0 +1,13 @@
+@inherits LayoutComponentBase
+@using PosSelfOrdering.Client.Components.Layout
+@using PosSelfOrdering.Client.Components.Common
+
+<div class="kiosk-layout">
+    <div class="kiosk-main-panel">
+        <OfflineBadge />
+        <HeaderNav />
+        <main class="main-content" style="padding-bottom: 24px;">
+            @Body
+        </main>
+    </div>
+</div>

@@ -1,0 +1,375 @@
+@page "/admin/login"
+@layout AdminLayout
+@inject IAdminService AdminService
+@inject AdminState AdminState
+@inject NavigationManager Navigation
+
+<div class="login-container">
+    <div class="login-card glass-panel">
+        <div class="login-header">
+            <div class="login-icon-circle">🔐</div>
+            <h1 class="login-title">Staff Authentication</h1>
+            <p class="login-subtitle">Masukkan 4-digit PIN akses operasional Kedai J.A</p>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(AdminState.ErrorMessage))
+        {
+            <div class="login-error-alert animate-shake">
+                <span class="error-icon">⚠️</span>
+                <span>@AdminState.ErrorMessage</span>
+            </div>
+        }
+
+        <!-- PIN DISPLAY -->
+        <div class="pin-display-wrapper">
+            <div class="pin-dots">
+                @for (int i = 0; i < 4; i++)
+                {
+                    var isFilled = i < enteredPin.Length;
+                    <div class="pin-dot @(isFilled ? "filled" : "")"></div>
+                }
+            </div>
+        </div>
+
+        <!-- QUICK DEMO PRESETS -->
+        <div class="quick-pins">
+            <span class="quick-pins-label">Quick Demo Access:</span>
+            <div class="preset-buttons">
+                <button type="button" class="preset-btn cashier" @onclick="@(() => SetPresetPin("1234"))">
+                    <span class="role-icon">👨‍🍳</span>
+                    <span class="role-text">Kasir (1234)</span>
+                </button>
+                <button type="button" class="preset-btn manager" @onclick="@(() => SetPresetPin("8888"))">
+                    <span class="role-icon">👑</span>
+                    <span class="role-text">Manager (8888)</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- VIRTUAL PIN PAD -->
+        <div class="pin-keypad">
+            @for (int i = 1; i <= 9; i++)
+            {
+                var num = i.ToString();
+                <button type="button" class="key-btn" @onclick="@(() => AppendDigit(num))">@num</button>
+            }
+            <button type="button" class="key-btn action-key clear" @onclick="ClearPin" title="Hapus Semua">C</button>
+            <button type="button" class="key-btn" @onclick="@(() => AppendDigit("0"))">0</button>
+            <button type="button" class="key-btn action-key backspace" @onclick="Backspace" title="Hapus">⌫</button>
+        </div>
+
+        <button type="button" class="login-submit-btn" @onclick="HandleSubmit" disabled="@(enteredPin.Length < 4 || isAuthenticating)">
+            @if (isAuthenticating)
+            {
+                <span class="spinner-sm"></span>
+                <span>Memverifikasi...</span>
+            }
+            else
+            {
+                <span>Masuk ke Backoffice ➔</span>
+            }
+        </button>
+
+        <div class="login-footer">
+            <a href="/" class="back-to-kiosk-link">← Kembali ke Self-Ordering Pelanggan</a>
+        </div>
+    </div>
+</div>
+
+<style>
+.login-container {
+    min-height: 80vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.login-card {
+    max-width: 420px;
+    width: 100%;
+    background: rgba(17, 24, 39, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 24px;
+    padding: 32px 28px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+    text-align: center;
+}
+
+.login-icon-circle {
+    width: 56px;
+    height: 56px;
+    background: rgba(245, 158, 11, 0.15);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.6rem;
+    margin: 0 auto 16px;
+}
+
+.login-title {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #f9fafb;
+    margin-bottom: 6px;
+}
+
+.login-subtitle {
+    font-size: 0.85rem;
+    color: #9ca3af;
+    margin-bottom: 24px;
+}
+
+.login-error-alert {
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    color: #fca5a5;
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 20px;
+    text-align: left;
+}
+
+.animate-shake {
+    animation: shake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+@@keyframes shake {
+    10%, 90% { transform: translate3d(-1px, 0, 0); }
+    20%, 80% { transform: translate3d(2px, 0, 0); }
+    30%, 50%, 70% { transform: translate3d(-3px, 0, 0); }
+    40%, 60% { transform: translate3d(3px, 0, 0); }
+}
+
+.pin-display-wrapper {
+    margin-bottom: 24px;
+}
+
+.pin-dots {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+}
+
+.pin-dot {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.08);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pin-dot.filled {
+    background: #fbbf24;
+    border-color: #f59e0b;
+    box-shadow: 0 0 14px rgba(245, 158, 11, 0.6);
+    transform: scale(1.15);
+}
+
+.quick-pins {
+    margin-bottom: 20px;
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 12px;
+    padding: 12px;
+}
+
+.quick-pins-label {
+    display: block;
+    font-size: 0.72rem;
+    color: #6b7280;
+    text-transform: uppercase;
+    font-weight: 700;
+    margin-bottom: 8px;
+}
+
+.preset-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+.preset-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.preset-btn.cashier {
+    background: rgba(59, 130, 246, 0.15);
+    border: 1px solid rgba(59, 130, 246, 0.35);
+    color: #93c5fd;
+}
+
+.preset-btn.cashier:hover {
+    background: rgba(59, 130, 246, 0.25);
+}
+
+.preset-btn.manager {
+    background: rgba(245, 158, 11, 0.15);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    color: #fcd34d;
+}
+
+.preset-btn.manager:hover {
+    background: rgba(245, 158, 11, 0.25);
+}
+
+.pin-keypad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.key-btn {
+    height: 56px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 1.35rem;
+    font-weight: 700;
+    border-radius: 14px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.key-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.25);
+    transform: translateY(-2px);
+}
+
+.key-btn:active {
+    transform: translateY(1px);
+}
+
+.key-btn.action-key {
+    font-size: 1.1rem;
+    color: #9ca3af;
+}
+
+.key-btn.action-key.clear {
+    color: #f87171;
+}
+
+.login-submit-btn {
+    width: 100%;
+    height: 50px;
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: #000;
+    font-size: 1rem;
+    font-weight: 800;
+    border: none;
+    border-radius: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    box-shadow: 0 4px 15px rgba(245, 158, 11, 0.35);
+}
+
+.login-submit-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.login-submit-btn:not(:disabled):hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(245, 158, 11, 0.5);
+}
+
+.login-footer {
+    margin-top: 20px;
+}
+
+.back-to-kiosk-link {
+    font-size: 0.82rem;
+    color: #6b7280;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.back-to-kiosk-link:hover {
+    color: #9ca3af;
+}
+</style>
+
+@code {
+    private string enteredPin = "";
+    private bool isAuthenticating = false;
+
+    private void AppendDigit(string digit)
+    {
+        if (enteredPin.Length < 4)
+        {
+            enteredPin += digit;
+            if (enteredPin.Length == 4)
+            {
+                _ = HandleSubmit();
+            }
+        }
+    }
+
+    private void Backspace()
+    {
+        if (enteredPin.Length > 0)
+        {
+            enteredPin = enteredPin[..^1];
+        }
+    }
+
+    private void ClearPin()
+    {
+        enteredPin = "";
+        AdminState.ClearError();
+    }
+
+    private async Task SetPresetPin(string pin)
+    {
+        enteredPin = pin;
+        await HandleSubmit();
+    }
+
+    private async Task HandleSubmit()
+    {
+        if (enteredPin.Length != 4 || isAuthenticating) return;
+
+        isAuthenticating = true;
+        try
+        {
+            var success = await AdminService.LoginWithPinAsync(enteredPin);
+            if (success)
+            {
+                Navigation.NavigateTo("/admin/orders");
+            }
+            else
+            {
+                enteredPin = "";
+            }
+        }
+        finally
+        {
+            isAuthenticating = false;
+        }
+    }
+}

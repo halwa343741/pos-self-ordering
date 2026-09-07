@@ -1,0 +1,158 @@
+@using PosSelfOrdering.Client.DTOs.Admin
+@using PosSelfOrdering.Client.Extensions
+
+@if (IsOpen)
+{
+    <div class="modal-backdrop" @onclick="Close">
+        <div class="voucher-modal-container glass-panel" @onclick:stopPropagation>
+            <div class="modal-header">
+                <div class="header-left">
+                    <span class="header-icon">🏷️</span>
+                    <h3>@(ExistingVoucher != null ? "Edit Promo Voucher" : "Tambah Voucher Promo Baru")</h3>
+                </div>
+                <button type="button" class="close-btn" @onclick="Close">✕</button>
+            </div>
+
+            <div class="modal-body">
+                @if (!string.IsNullOrWhiteSpace(validationError))
+                {
+                    <div class="error-banner">
+                        <span>⚠️ @validationError</span>
+                    </div>
+                }
+
+                <div class="form-grid">
+                    <div class="form-group full-width">
+                        <label class="field-label">Kode Voucher (Kapital) *</label>
+                        <input type="text" class="form-input code-input" placeholder="DISKON10"
+                               value="@voucherCode"
+                               @oninput="@(e => voucherCode = (e.Value?.ToString() ?? "").ToUpperInvariant())" />
+                    </div>
+
+                    <div class="form-group full-width">
+                        <label class="field-label">Deskripsi Promo *</label>
+                        <input type="text" class="form-input" placeholder="Potongan Rp 10.000 Min. Belanja Rp 50.000" @bind="description" />
+                    </div>
+
+                    <div class="form-group">
+                        <label class="field-label">Tipe Diskon *</label>
+                        <select class="form-select" @bind="isPercentage">
+                            <option value="false">Nominal Tetap (Rp)</option>
+                            <option value="true">Persentase (%)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="field-label">@(isPercentage ? "Nilai Diskon (%) *" : "Nilai Diskon (Rp) *")</label>
+                        <input type="number" class="form-input" placeholder="@(isPercentage ? "15" : "10000")" @bind="discountAmount" />
+                    </div>
+
+                    <div class="form-group">
+                        <label class="field-label">Minimal Transaksi (Rp)</label>
+                        <input type="number" class="form-input" placeholder="50000" @bind="minOrderAmount" />
+                    </div>
+
+                    <div class="form-group">
+                        <label class="field-label">Status Voucher</label>
+                        <select class="form-select" @bind="isActive">
+                            <option value="true">🟢 Aktif & Dapat Digunakan</option>
+                            <option value="false">🔴 Nonaktif</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn-cancel" @onclick="Close">Batal</button>
+                <button type="button" class="btn-save" @onclick="HandleSave">
+                    <span>💾 Simpan Voucher</span>
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+.voucher-modal-container {
+    background: #1e293b;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 20px;
+    max-width: 480px;
+    width: 100%;
+    overflow: hidden;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
+}
+
+.code-input {
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: #fbbf24 !important;
+}
+</style>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public VoucherDto? ExistingVoucher { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<VoucherDto> OnSave { get; set; }
+
+    private string voucherCode = "";
+    private string description = "";
+    private decimal discountAmount = 10000m;
+    private bool isPercentage = false;
+    private decimal minOrderAmount = 50000m;
+    private bool isActive = true;
+    private string? validationError;
+
+    protected override void OnParametersSet()
+    {
+        if (ExistingVoucher != null)
+        {
+            voucherCode = ExistingVoucher.Code;
+            description = ExistingVoucher.Description;
+            discountAmount = ExistingVoucher.DiscountAmount;
+            isPercentage = ExistingVoucher.IsPercentage;
+            minOrderAmount = ExistingVoucher.MinOrderAmount;
+            isActive = ExistingVoucher.IsActive;
+        }
+        else
+        {
+            voucherCode = "";
+            description = "";
+            discountAmount = 10000m;
+            isPercentage = false;
+            minOrderAmount = 50000m;
+            isActive = true;
+        }
+        validationError = null;
+    }
+
+    private async Task Close() => await OnClose.InvokeAsync();
+
+    private async Task HandleSave()
+    {
+        if (string.IsNullOrWhiteSpace(voucherCode))
+        {
+            validationError = "Kode voucher wajib diisi.";
+            return;
+        }
+
+        if (discountAmount <= 0)
+        {
+            validationError = "Nilai diskon harus lebih dari 0.";
+            return;
+        }
+
+        var voucher = new VoucherDto(
+            Code: voucherCode.Trim().ToUpperInvariant(),
+            Description: description.Trim(),
+            DiscountAmount: discountAmount,
+            IsPercentage: isPercentage,
+            MinOrderAmount: minOrderAmount,
+            IsActive: isActive
+        );
+
+        await OnSave.InvokeAsync(voucher);
+        await Close();
+    }
+}

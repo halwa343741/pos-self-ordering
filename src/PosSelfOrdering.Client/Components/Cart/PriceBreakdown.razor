@@ -1,0 +1,43 @@
+@using PosSelfOrdering.Client.Extensions
+
+<div class="glass-panel" style="padding: 16px; display: flex; flex-direction: column; gap: 10px;">
+    <h4 style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;">Rincian Pembayaran</h4>
+
+    <div style="display: flex; justify-content: space-between; font-size: 0.9rem; color: var(--text-secondary);">
+        <span>Subtotal Pesanan</span>
+        <span>@Subtotal.ToIdr()</span>
+    </div>
+
+    @if (Discount > 0)
+    {
+        <div style="display: flex; justify-content: space-between; font-size: 0.9rem; color: var(--color-success);">
+            <span>Diskon Promo</span>
+            <span>-@Discount.ToIdr()</span>
+        </div>
+    }
+
+    <div style="display: flex; justify-content: space-between; font-size: 0.9rem; color: var(--text-secondary);">
+        <span>Pajak Restoran PB1 (10%)</span>
+        <span>@Tax.ToIdr()</span>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; font-size: 0.9rem; color: var(--text-secondary);">
+        <span>Biaya Layanan (5%)</span>
+        <span>@ServiceCharge.ToIdr()</span>
+    </div>
+
+    <div style="height: 1px; background: var(--border-subtle); margin: 4px 0;"></div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-weight: 700; font-size: 1.05rem; color: var(--text-primary);">Total Pembayaran</span>
+        <span style="font-weight: 800; font-size: 1.25rem; color: var(--color-primary);">@GrandTotal.ToIdr()</span>
+    </div>
+</div>
+
+@code {
+    [Parameter] public decimal Subtotal { get; set; }
+    [Parameter] public decimal Discount { get; set; } = 0;
+    [Parameter] public decimal Tax { get; set; }
+    [Parameter] public decimal ServiceCharge { get; set; }
+    [Parameter] public decimal GrandTotal { get; set; }
+}

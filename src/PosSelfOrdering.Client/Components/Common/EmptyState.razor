@@ -1,0 +1,20 @@
+<div class="empty-state animate-fade-in">
+    <div class="state-icon">
+        <span style="font-size: 2rem;">🍽️</span>
+    </div>
+    <h3>@Title</h3>
+    <p style="max-width: 320px;">@Description</p>
+    @if (!string.IsNullOrWhiteSpace(ActionText) && OnAction.HasDelegate)
+    {
+        <button class="btn btn-secondary btn-sm" @onclick="OnAction" style="margin-top: 8px;">
+            @ActionText
+        </button>
+    }
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "Tidak Ada Data";
+    [Parameter] public string Description { get; set; } = "Belum ada item yang dapat ditampilkan saat ini.";
+    [Parameter] public string? ActionText { get; set; }
+    [Parameter] public EventCallback OnAction { get; set; }
+}

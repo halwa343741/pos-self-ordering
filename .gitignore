@@ -1,0 +1,23 @@
+## .NET Ignore Rules
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# Visual Studio / VS Code / Rider
+.vs/
+.vscode/
+.idea/
+*.user
+*.userosscache
+*.suo
+*.userprefs
+
+# Publish output
+publish/
+publish-test/
+release/
+
+# OS Files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,346 @@
+@using PosSelfOrdering.Client.DTOs.Admin
+@using PosSelfOrdering.Client.Extensions
+@inject IJSRuntime JS
+
+@if (IsOpen && Order != null)
+{
+    <div class="modal-backdrop" @onclick="Close">
+        <div class="receipt-modal-container glass-panel" @onclick:stopPropagation>
+            <div class="modal-header">
+                <div class="header-left">
+                    <span class="header-icon">🖨️</span>
+                    <h3>Preview Struk Kasir</h3>
+                </div>
+                <button type="button" class="close-btn" @onclick="Close">✕</button>
+            </div>
+
+            <div class="modal-body">
+                <!-- THERMAL RECEIPT PREVIEW (58mm / 80mm styled) -->
+                <div class="thermal-paper">
+                    <div class="receipt-header">
+                        <div class="store-logo">☕ KEDAI J.A</div>
+                        <div class="store-address">Jl. Senopati No. 45, Jakarta Selatan</div>
+                        <div class="store-telp">Telp: 0812-3456-7890</div>
+                        <div class="dashed-divider">================================</div>
+                    </div>
+
+                    <div class="receipt-meta">
+                        <div class="meta-line">
+                            <span>No: @Order.OrderNumber</span>
+                            <span>@(Order.OrderType == "DineIn" ? $"Meja: {Order.TableNumber}" : "Takeaway")</span>
+                        </div>
+                        <div class="meta-line">
+                            <span>Tgl: @Order.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</span>
+                            <span>Kasir: Staff 01</span>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(Order.CustomerName))
+                        {
+                            <div class="meta-line">
+                                <span>Pelanggan: @Order.CustomerName</span>
+                            </div>
+                        }
+                        <div class="dashed-divider">--------------------------------</div>
+                    </div>
+
+                    <div class="receipt-items">
+                        @if (Order.Items != null)
+                        {
+                            @foreach (var item in Order.Items)
+                            {
+                                <div class="item-row">
+                                    <div class="item-main">
+                                        <span class="item-name">@item.Name</span>
+                                        <span class="item-total">@item.Subtotal.ToIdr()</span>
+                                    </div>
+                                    <div class="item-sub">
+                                        <span>@item.Quantity x @item.UnitPrice.ToIdr()</span>
+                                    </div>
+                                    @if (!string.IsNullOrWhiteSpace(item.SelectedModifiersSummary) && item.SelectedModifiersSummary != "Standar")
+                                    {
+                                        <div class="item-mod-line">
+                                            <span>+ @item.SelectedModifiersSummary</span>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        }
+                        <div class="dashed-divider">--------------------------------</div>
+                    </div>
+
+                    <div class="receipt-summary">
+                        <div class="sum-row">
+                            <span>Subtotal:</span>
+                            <span>@Order.Subtotal.ToIdr()</span>
+                        </div>
+                        <div class="sum-row">
+                            <span>PB1 (10%):</span>
+                            <span>@Order.TaxAmount.ToIdr()</span>
+                        </div>
+                        <div class="sum-row">
+                            <span>Service (5%):</span>
+                            <span>@Order.ServiceCharge.ToIdr()</span>
+                        </div>
+                        <div class="dashed-divider">================================</div>
+                        <div class="sum-row grand-total">
+                            <span>TOTAL:</span>
+                            <span>@Order.GrandTotal.ToIdr()</span>
+                        </div>
+                        <div class="sum-row">
+                            <span>Metode Bayar:</span>
+                            <span>@Order.PaymentMethod</span>
+                        </div>
+                        <div class="sum-row">
+                            <span>Status:</span>
+                            <span>@(Order.IsPaid ? "LUNAS" : "BELUM LUNAS")</span>
+                        </div>
+                    </div>
+
+                    <div class="receipt-footer">
+                        <div class="dashed-divider">================================</div>
+                        <div class="thank-you">Terima Kasih Atas Kunjungan Anda!</div>
+                        <div class="wifi-info">Free WiFi: KedaiJA_Guest | Pass: kopienak</div>
+                        <div class="powered-by">Powered by Kedai J.A Self-Ordering</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn-cancel" @onclick="Close">Tutup</button>
+                <button type="button" class="btn-print" @onclick="TriggerPrint">
+                    <span>🖨️ Cetak Struk</span>
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 16px;
+    animation: fadeIn 0.2s ease;
+}
+
+.receipt-modal-container {
+    background: #1e293b;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 20px;
+    max-width: 440px;
+    width: 100%;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.header-icon {
+    font-size: 1.3rem;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #f8fafc;
+}
+
+.close-btn {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 1.2rem;
+    cursor: pointer;
+}
+
+.modal-body {
+    padding: 20px;
+    overflow-y: auto;
+    display: flex;
+    justify-content: center;
+    background: #0f172a;
+}
+
+.thermal-paper {
+    background: #fff;
+    color: #111;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.8rem;
+    padding: 16px 14px;
+    width: 100%;
+    max-width: 320px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+}
+
+.receipt-header {
+    text-align: center;
+}
+
+.store-logo {
+    font-weight: 900;
+    font-size: 1.1rem;
+    letter-spacing: 1px;
+}
+
+.store-address, .store-telp {
+    font-size: 0.7rem;
+    color: #444;
+}
+
+.dashed-divider {
+    overflow: hidden;
+    white-space: nowrap;
+    letter-spacing: -1px;
+    margin: 4px 0;
+    color: #888;
+    text-align: center;
+}
+
+.receipt-meta {
+    margin: 6px 0;
+    font-size: 0.72rem;
+}
+
+.meta-line {
+    display: flex;
+    justify-content: space-between;
+}
+
+.receipt-items {
+    margin: 6px 0;
+}
+
+.item-row {
+    margin-bottom: 6px;
+}
+
+.item-main {
+    display: flex;
+    justify-content: space-between;
+    font-weight: 700;
+}
+
+.item-sub {
+    font-size: 0.7rem;
+    color: #555;
+}
+
+.item-mod-line {
+    font-size: 0.68rem;
+    color: #666;
+    font-style: italic;
+}
+
+.receipt-summary {
+    font-size: 0.75rem;
+}
+
+.sum-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 2px 0;
+}
+
+.sum-row.grand-total {
+    font-weight: 900;
+    font-size: 0.9rem;
+}
+
+.receipt-footer {
+    text-align: center;
+    margin-top: 8px;
+    font-size: 0.7rem;
+}
+
+.thank-you {
+    font-weight: 700;
+    margin: 4px 0;
+}
+
+.wifi-info {
+    font-size: 0.65rem;
+    color: #666;
+}
+
+.powered-by {
+    font-size: 0.6rem;
+    color: #999;
+    margin-top: 6px;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 12px;
+    padding: 16px 20px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    background: #1e293b;
+}
+
+.btn-cancel {
+    flex: 1;
+    padding: 10px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #cbd5e1;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.btn-print {
+    flex: 2;
+    padding: 10px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    border: none;
+    color: #000;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(245, 158, 11, 0.35);
+}
+</style>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public AdminOrderDto? Order { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private async Task Close()
+    {
+        await OnClose.InvokeAsync();
+    }
+
+    private async Task TriggerPrint()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("window.print");
+        }
+        catch
+        {
+            // Ignored if browser print isn't available
+        }
+    }
+}
